@@ -1,0 +1,91 @@
+{
+  "A_backend_failure": {
+    "contract_version": "vault-backlinks-result-v1",
+    "vault_id": "project-in-progress",
+    "path": "CLAUDE.md",
+    "backend_used": "none",
+    "backlinks": null,
+    "total": 0,
+    "dropped_out_of_scope": 0,
+    "review_required": true,
+    "review_checks": [
+      {
+        "code": "BASENAME_COLLISION",
+        "required_action": "11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename."
+      }
+    ],
+    "error": "live backend unavailable: obsidian CLI is not on PATH"
+  },
+  "B_genuine_zero": {
+    "contract_version": "vault-backlinks-result-v1",
+    "vault_id": "project-in-progress",
+    "path": "CLAUDE.md",
+    "backend_used": "live",
+    "backlinks": [],
+    "total": 0,
+    "dropped_out_of_scope": 0,
+    "review_required": true,
+    "review_checks": [
+      {
+        "code": "BASENAME_COLLISION",
+        "required_action": "11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename."
+      }
+    ],
+    "error": null
+  },
+  "C_all_out_of_scope": {
+    "contract_version": "vault-backlinks-result-v1",
+    "vault_id": "project-in-progress",
+    "path": "CLAUDE.md",
+    "backend_used": "live",
+    "backlinks": [],
+    "total": 0,
+    "dropped_out_of_scope": 1,
+    "review_required": true,
+    "review_checks": [
+      {
+        "code": "BASENAME_COLLISION",
+        "required_action": "11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename."
+      },
+      {
+        "code": "ALL_RESULTS_OUT_OF_SCOPE",
+        "required_action": "obsidian CLI returned 1 result(s), none of which exist under vault_id 'project-in-progress''s registered root. The CLI's vault= argument is not reliably honored (measured 2026-08-08) -- this likely means the Obsidian app's active vault does not match vault_id. Re-check which vault is open in the Obsidian app before trusting this as 'zero backlinks'."
+      }
+    ],
+    "error": null
+  },
+  "D_real_hits_with_review": {
+    "contract_version": "vault-backlinks-result-v1",
+    "vault_id": "project-in-progress",
+    "path": "CLAUDE.md",
+    "backend_used": "live",
+    "backlinks": [
+      {
+        "source_path": "notes/00-moc/by-source/other.md",
+        "link_count": 1
+      },
+      {
+        "source_path": "notes/00-moc/by-topic/evidence-provenance.md",
+        "link_count": 1
+      },
+      {
+        "source_path": "notes/00-moc/by-topic/vault-architecture.md",
+        "link_count": 1
+      },
+      {
+        "source_path": "notes/00-moc/by-type/documentation.md",
+        "link_count": 1
+      }
+    ],
+    "total": 4,
+    "dropped_out_of_scope": 0,
+    "review_required": true,
+    "review_checks": [
+      {
+        "code": "BASENAME_COLLISION",
+        "required_action": "11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename."
+      }
+    ],
+    "error": null
+  }
+}
