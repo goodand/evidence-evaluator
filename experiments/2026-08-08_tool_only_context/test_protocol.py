@@ -168,8 +168,13 @@ def test_provenance_refuses_a_wrong_tool_access_label():
     assert any("tool_access" in e for e in errors)
 
 
-def test_manifest_is_still_unfrozen():
-    """Guards the freeze order: design_commit stays PENDING_FREEZE until the
-    manifest-freeze commit fills it in. If this ever fails, the manifest was
-    frozen -- update this test in that same commit, deliberately."""
-    assert MANIFEST["protocol"]["design_commit"] == "PENDING_FREEZE"
+def test_manifest_is_frozen_against_a_real_commit():
+    """Guards the freeze order (methodology §1). Was
+    `assert design_commit == "PENDING_FREEZE"` until the manifest-freeze
+    commit filled it in -- updated here, in that same commit, deliberately.
+    Now guards the opposite direction: design_commit must be a real,
+    40-hex-char commit id, not a placeholder and not something hand-typed."""
+    import re
+    design_commit = MANIFEST["protocol"]["design_commit"]
+    assert re.fullmatch(r"[0-9a-f]{40}", design_commit), (
+        f"design_commit {design_commit!r} is not a real git commit hash")

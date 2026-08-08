@@ -90,7 +90,7 @@ RESPONSE_SCHEMA = {
 }
 
 
-def build() -> dict:
+def build(design_commit: str = "PENDING_FREEZE") -> dict:
     fixtures = json.loads((HERE / "fixtures.json").read_text(encoding="utf-8"))
     prompts = []
     for arm, interface in ARMS.items():
@@ -108,7 +108,7 @@ def build() -> dict:
     return {
         "contract_version": "tool-only-context-manifest-v1",
         "protocol": {
-            "design_commit": "PENDING_FREEZE",
+            "design_commit": design_commit,
             "subject_model": "haiku",
             "replicates_per_cell": 5,
             "context_isolation": "workflow_cold_subagent",
@@ -120,9 +120,12 @@ def build() -> dict:
 
 
 if __name__ == "__main__":
-    manifest = build()
+    import sys
+    design_commit = sys.argv[1] if len(sys.argv) > 1 else "PENDING_FREEZE"
+    manifest = build(design_commit)
     out = HERE / "_prompts.json"
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
                    encoding="utf-8")
     print(f"wrote {out} with {len(manifest['prompts'])} prompts "
-          f"({len(ARMS)} arms x {len(manifest['prompts']) // len(ARMS)} cases)")
+          f"({len(ARMS)} arms x {len(manifest['prompts']) // len(ARMS)} cases), "
+          f"design_commit={design_commit}")

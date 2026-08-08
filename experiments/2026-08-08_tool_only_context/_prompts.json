@@ -1,7 +1,7 @@
 {
   "contract_version": "tool-only-context-manifest-v1",
   "protocol": {
-    "design_commit": "PENDING_FREEZE",
+    "design_commit": "182570b5e0c6e05b5bc5ac66762df4adb94d63f3",
     "subject_model": "haiku",
     "replicates_per_cell": 5,
     "context_isolation": "workflow_cold_subagent",
