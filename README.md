@@ -104,6 +104,8 @@ from evaluator import evaluate
 
 ```python
 import sys
+from pathlib import Path
+
 sys.path.insert(0, "evidence-evaluator/evidence_evaluator")
 from contract import CASE_VERSION, GOLD_VERSION
 from runner import Corpus, run_case

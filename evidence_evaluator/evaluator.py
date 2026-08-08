@@ -191,7 +191,7 @@ def evaluate(trace: dict, gold: dict, case: dict) -> dict:
     )
 
     return {
-        "case_id": case["id"],
+        "case_id": case["id"], "arm": trace.get("arm"),
         "full_hard_gate": hard_gate,
         "failure_codes": sorted(codes),
         "failure_meanings": {c: FAILURE_CODES.get(c, "?") for c in sorted(codes)},

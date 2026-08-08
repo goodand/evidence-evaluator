@@ -393,7 +393,7 @@ def codex_mcp_command(codex: str, subject: Path, socket_path: Path,
     """Build a Codex command where OAuth is parent-only and tools are closed.
 
     `bridge_script` defaults to `mcp_bridge.py` shipped next to this module
-    (see `live_subject_tool.request` / `mcp_bridge.py`); pass your own if you
+    (see `subject_tool.request` / `mcp_bridge.py`); pass your own if you
     have a different action surface.
     """
     server = bridge_script or (Path(__file__).resolve().parent / "mcp_bridge.py")
