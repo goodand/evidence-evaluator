@@ -43,15 +43,37 @@ def _shipped_docstring() -> str:
     raise AssertionError("could not find vault_backlinks' docstring in server.py")
 
 
-def test_t1_arm_text_matches_the_shipped_docstring_exactly():
-    """The load-bearing check. T1 is the arm whose result decides whether the
-    tool is safe as shipped -- if this text drifts from server.py, the
-    experiment measures a docstring nobody actually uses."""
-    normalize = lambda s: " ".join(s.split())  # noqa: E731
-    assert normalize(_gen_prompts.T1_DOCSTRING) == normalize(_shipped_docstring()), (
-        "T1_DOCSTRING in _gen_prompts.py no longer matches server.py's "
-        "registered docstring -- regenerate the manifest as an explicit "
-        "amendment commit, do not silently edit the frozen prompts.")
+_NORMALIZE = lambda s: " ".join(s.split())  # noqa: E731
+
+# T1_DOCSTRING's frozen hash (recorded 2026-08-09, when T3 was introduced and
+# T1 stopped tracking server.py). Any change to this constant must be an
+# explicit amendment, not a silent edit -- 609a8bb's scored trials depend on
+# this exact text.
+_T1_FROZEN_SHA256 = "81f9cc4868f5a100485afeaf08544b57578efb33779d369e9cf07870dd03f0f8"
+
+
+def test_t1_docstring_is_frozen_and_no_longer_tracks_server_py():
+    """T1 is baked into the already-scored, committed manifest (857b203) and
+    trials.json (609a8bb) -- it must stay byte-identical forever regardless
+    of what server.py's docstring becomes later. This replaces the earlier
+    "T1 matches shipped" check (see test_t3_arm_text_matches_the_shipped_docstring_exactly
+    below) now that T1 and "shipped" have diverged on purpose."""
+    import hashlib
+    got = hashlib.sha256(_gen_prompts.T1_DOCSTRING.encode("utf-8")).hexdigest()
+    assert got == _T1_FROZEN_SHA256, (
+        "T1_DOCSTRING changed -- this would silently redefine what the "
+        "already-scored T1 trials (609a8bb) measured. If T1 genuinely needs "
+        "to change, that is a new arm, not an edit to this one.")
+
+
+def test_t3_arm_text_matches_the_shipped_docstring_exactly():
+    """The load-bearing check, now pointed at T3 -- the 2026-08-09 candidate
+    fix applied to server.py (OPERATIONS_LOG.md §5 item 2 / §6). If this
+    drifts, the T3 experiment measures a docstring nobody actually ships."""
+    assert _NORMALIZE(_gen_prompts.T3_DOCSTRING) == _NORMALIZE(_shipped_docstring()), (
+        "T3_DOCSTRING in _gen_prompts.py no longer matches server.py's "
+        "registered docstring -- regenerate _prompts_t3.json as an explicit "
+        "amendment, do not silently edit frozen prompts.")
 
 
 def test_every_fixture_has_a_scored_truth_entry():
@@ -81,9 +103,38 @@ def test_the_confusable_trio_really_is_confusable():
 
 
 def test_manifest_covers_every_arm_case_combination():
-    expected = {f"{arm}__{case}" for arm in _gen_prompts.ARMS for case in FIXTURES}
+    """Scoped to the originally-frozen arms (T0/T1/T2) -- T3 lives in its
+    own addendum manifest (_prompts_t3.json), checked separately below, so
+    it must not be pulled into ARMS's full membership here."""
+    original_arms = ("T0", "T1", "T2")
+    expected = {f"{arm}__{case}" for arm in original_arms for case in FIXTURES}
     actual = {p["trial_id"] for p in MANIFEST["prompts"]}
     assert actual == expected
+
+
+def test_t3_addendum_manifest_covers_only_its_designated_cases():
+    """T3 exists to re-test only the two cells where T1/T2 actually failed
+    (B_genuine_zero: Z2, D_real_hits_with_review: Z6) -- not a full re-run.
+    See ARM_CASES's docstring in _gen_prompts.py.
+
+    Calls build() directly rather than reading the pre-generated
+    _prompts_t3.json -- mutation-verified 2026-08-09: an earlier version of
+    this test read the static file, and gutting ARM_CASES filtering in
+    build() left it green because the file on disk didn't change when the
+    *code* was mutated. Exercising the live function is what makes this
+    catch a real regression instead of a stale artifact.
+    """
+    t3_manifest = _gen_prompts.build("test-commit", arms=("T3",))
+    actual = {p["trial_id"] for p in t3_manifest["prompts"]}
+    assert actual == {"T3__B_genuine_zero", "T3__D_real_hits_with_review"}
+
+    if (HERE / "_prompts_t3.json").is_file():
+        on_disk = json.loads((HERE / "_prompts_t3.json").read_text(encoding="utf-8"))
+        on_disk_ids = {p["trial_id"] for p in on_disk["prompts"]}
+        assert on_disk_ids == actual, (
+            "_prompts_t3.json on disk does not match build()'s current "
+            "output -- regenerate it (python3 _gen_prompts.py <design_commit> "
+            "--arms T3 --out _prompts_t3.json)")
 
 
 def test_manifest_prompt_hashes_are_correct():

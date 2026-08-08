@@ -47,8 +47,12 @@ class ProvenanceError(RuntimeError):
     """The trial set does not match the frozen manifest."""
 
 
-def load_manifest() -> dict:
-    return json.loads((HERE / "_prompts.json").read_text(encoding="utf-8"))
+def load_manifest(name: str = "_prompts.json") -> dict:
+    """`name` defaults to the original frozen 12-cell manifest. Addendum
+    manifests (e.g. `_prompts_t3.json`) are scored by passing --manifest
+    explicitly -- this default never changes, so a bare `--trials trials.json`
+    invocation keeps validating against exactly what it always has."""
+    return json.loads((HERE / name).read_text(encoding="utf-8"))
 
 
 def validate_trial_set(trials: dict, manifest: dict) -> list[str]:
@@ -183,6 +187,10 @@ def summarize(rows: list[dict]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", default=None)
+    ap.add_argument("--manifest", default="_prompts.json",
+                    help="Manifest to validate/score against (default: the "
+                        "frozen 12-cell _prompts.json). Pass an addendum "
+                        "manifest, e.g. _prompts_t3.json, to score its trials.")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -239,7 +247,7 @@ def main() -> int:
         print("--trials is required unless --self-test is given")
         return 2
 
-    manifest = load_manifest()
+    manifest = load_manifest(args.manifest)
     trials = json.loads(Path(args.trials).read_text(encoding="utf-8"))
     errors = validate_trial_set(trials, manifest)
     if errors:
