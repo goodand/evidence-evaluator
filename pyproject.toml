@@ -1,0 +1,19 @@
+[project]
+name = "evidence-evaluator"
+version = "0.1.0"
+description = "Score whether a zero-context agent found and correctly cited the right sources, using a CLI agent you provide (Claude CLI, Codex CLI, or your own adapter)."
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+codex-mcp = ["fastmcp"]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["evidence_evaluator*"]
