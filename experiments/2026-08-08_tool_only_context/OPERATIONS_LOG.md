@@ -179,3 +179,54 @@ pattern from §2/§3 is not confined to case B: it reproduces on case D with
 the same shape (T1 best, T2 worst), now via a scored code instead of a
 manual count -- still not proof of a stable effect at n=5 (§5 item 3 still
 applies), but no longer resting on an ad hoc tally outside the evaluator.
+
+## 7. T3 result (2026-08-09) — the docstring fix, tested with Haiku
+
+Per the user's instruction to READ/prove/solve rather than stop at a
+recommendation: §5 item 2's candidate docstring fix was applied to
+`server.py` (d203a12) and re-tested with 10 fresh Haiku trials (296e56a),
+targeting only the two cells that actually failed.
+
+```
+                          T0    T1    T2    T3 (fixed docstring)
+B_genuine_zero   Z2:      3/5   3/5   4/5   1/5
+D_real_hits      Z6:      2/5   1/5   3/5   0/5
+```
+
+**The fix worked**, on this data. `D_real_hits_with_review` went from a
+worst-case 3/5 (T2) to 0/5 (T3) -- every one of the 5 fresh trials correctly
+stated `certain: true` for the determinate 4-backlink count.
+`B_genuine_zero` improved from 3-4/5 down to 1/5, not to 0/5. Reading the
+one remaining `Z2` trial (T3, replicate 2): the subject explicitly reasoned
+that basename collision could mean *the CLI itself resolved to the wrong
+file*, not that the returned count for the resolved file was uncertain --
+"The 0 backlinks count applies only to whichever file the CLI selected. To
+get a definitive answer, use the full path." This is a **different, more
+defensible** failure mode than what T1/T2 exhibited (conflating an unrelated
+caveat with count uncertainty): it is skepticism about which file was
+actually queried, a question the fixed docstring's added text does not
+address (it only disambiguates the *meaning* of `review_checks`, not
+whether the CLI honored `vault_id`/`path` correctly) -- and per
+`obsidian_backend.py`'s own documented measurement, that skepticism is not
+unfounded in general, just misapplied here (the response gives an exact
+`path` and the count is genuinely for that path).
+
+**Caveats on this result, stated plainly**:
+- n=5 per cell, same as the original design -- §5 item 3's caution about
+  not over-reading small samples applies here too.
+- T3 was compared against T0/T1/T2's *already-collected* trials, not run
+  in the same batch -- no new confound is expected (same fixtures, same
+  model, same task text) but this is a between-batches comparison, not a
+  single randomized run.
+- Only the two failing cells were re-tested; T3's behavior on
+  `A_backend_failure`/`C_all_out_of_scope` is unmeasured (though those
+  scored clean in every prior arm, so a regression there is unlikely, not
+  ruled out).
+
+**Conclusion**: the docstring fix is a legitimate, working mitigation for
+the caveat-scope conflation this experiment found, worth shipping. It does
+not fully close `Z2` for case B, and the residual failure looks like
+appropriate caution about a different, real risk (`vault_id` mismatch) that
+this docstring was never trying to address -- see `obsidian_backend.py`'s
+own module docstring for that risk's actual mitigation (the
+`exists_under_root` cross-check, not agent-facing wording).
