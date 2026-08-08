@@ -1,0 +1,144 @@
+"""Exercises `contracts.query_backlinks()` end to end with a fake
+`graph_for_candidate` -- no real Obsidian CLI or `.vault-harness/` needed.
+The fake stands in for the *external* IPC call only; every check downstream
+of it (registry lookup, path safety, the vault-root cross-check, result
+shaping) is this package's own code and runs for real.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+PKG = Path(__file__).resolve().parent.parent / "vault_backlinks_mcp"
+sys.path.insert(0, str(PKG))
+
+import pytest  # noqa: E402
+
+import contracts  # noqa: E402
+from registry import VaultEntry  # noqa: E402
+
+
+@pytest.fixture()
+def vault(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "target.md").write_text("t", encoding="utf-8")
+    (tmp_path / "docs" / "source.md").write_text("s", encoding="utf-8")
+    (tmp_path / "hidden_gold").mkdir()
+    (tmp_path / "hidden_gold" / "gold.json").write_text("{}", encoding="utf-8")
+    return {"t1": VaultEntry(vault_id="t1", root=tmp_path, obsidian_vault_name="T1")}
+
+
+def _fake_graph(backlinks_result):
+    def graph_for_candidate(vault_root, vault_name, path):
+        return {"backlinks": backlinks_result, "outgoing_links": [], "tags": []}, []
+    return graph_for_candidate
+
+
+def test_real_backlink_is_returned(vault, monkeypatch):
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: [{"file": "docs/source.md", "count": "2"}])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["error"] is None
+    assert result["backend_used"] == "live"
+    assert result["backlinks"] == [{"source_path": "docs/source.md", "link_count": 2}]
+    assert result["review_required"] is False
+
+
+def test_out_of_scope_result_is_dropped_and_flagged(vault, monkeypatch):
+    """The load-bearing safety behaviour: a CLI-returned path that does not
+    exist under the vault_id's own root (e.g. the CLI silently answered from
+    a different, wrong vault -- measured 2026-08-08, see
+    obsidian_backend.py) must never be trusted or silently kept."""
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: [{"file": "not/in/this/vault.md", "count": "1"}])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["backlinks"] == []
+    assert result["dropped_out_of_scope"] == 1
+    assert result["review_required"] is True
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "ALL_RESULTS_OUT_OF_SCOPE" in codes
+
+
+def test_forbidden_target_path_is_refused_before_any_cli_call(vault, monkeypatch):
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: calls.append(1) or [])
+    result = contracts.query_backlinks("t1", "hidden_gold/gold.json", registry=vault)
+    assert result["error"] is not None
+    assert result["backend_used"] == "none"
+    assert calls == [], "must refuse before ever calling the live backend"
+
+
+def test_raw_string_result_from_non_json_cli_fallback_does_not_crash(vault, monkeypatch):
+    """Regression (found 2026-08-08 querying a real vault, not synthetic):
+    graph_for_candidate()'s own JSON parse falls back to a list of raw
+    strings when the CLI's output for a call wasn't valid JSON. A bare
+    'AttributeError: str has no attribute get' would otherwise silently turn
+    a real query into a crash instead of a reported result."""
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: ["docs/source.md"])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["error"] is None
+    assert result["backlinks"] == [{"source_path": "docs/source.md", "link_count": 1}]
+
+
+def test_forbidden_source_in_cli_result_is_dropped(vault, monkeypatch):
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: [
+                            {"file": "docs/source.md", "count": "1"},
+                            {"file": "hidden_gold/gold.json", "count": "1"},
+                        ])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    sources = [b["source_path"] for b in result["backlinks"]]
+    assert "hidden_gold/gold.json" not in sources
+    assert "docs/source.md" in sources
+
+
+def test_unregistered_vault_id_is_refused(vault, monkeypatch):
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: calls.append(1) or [])
+    result = contracts.query_backlinks("no-such-vault", "target.md", registry=vault)
+    assert result["error"] is not None
+    assert result["backend_used"] == "none"
+    assert calls == []
+
+
+def test_path_traversal_is_refused(vault, monkeypatch):
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: calls.append(1) or [])
+    result = contracts.query_backlinks("t1", "../../../../etc/hosts", registry=vault)
+    assert result["error"] is not None
+    assert calls == []
+
+
+def test_target_path_not_on_disk_is_refused_before_cli_call(vault, monkeypatch):
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: calls.append(1) or [])
+    result = contracts.query_backlinks("t1", "does/not/exist.md", registry=vault)
+    assert result["error"] is not None
+    assert calls == []
+
+
+def test_obsidian_unavailable_is_reported_not_swallowed(vault, monkeypatch):
+    from obsidian_backend import ObsidianUnavailable
+
+    def raise_unavailable(root, name, path):
+        raise ObsidianUnavailable("obsidian CLI is not on PATH")
+    monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["backend_used"] == "none"
+    assert result["backlinks"] is None
+    assert "obsidian CLI is not on PATH" in result["error"]
+
+
+def test_max_results_truncation_is_flagged(vault, monkeypatch):
+    many = [{"file": "docs/source.md", "count": "1"}] * 5
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
+    result = contracts.query_backlinks("t1", "target.md", max_results=2, registry=vault)
+    assert result["total"] == 2
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "TRUNCATED" in codes
