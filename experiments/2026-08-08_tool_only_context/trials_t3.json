@@ -1,0 +1,202 @@
+{
+  "protocol": {
+    "design_commit": "01ac23e0f30fe80031d7a146689f6866415ba6e4",
+    "subject_model": "haiku",
+    "replicates_per_cell": 5,
+    "context_isolation": "workflow_cold_subagent",
+    "tool_access": "description_only"
+  },
+  "trials": [
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "replicate": 0,
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "11 other files in the vault share the basename CLAUDE.md across various worktrees and archive locations. Consumers must use exact paths to disambiguate, not basenames."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "replicate": 1,
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "11 other files in this vault share the basename 'CLAUDE.md' across different worktrees and directories. The query was resolved by exact path via live Obsidian CLI, so this result is definitive for that specific file. References to 'CLAUDE.md' by basename alone would be ambiguous in this multi-worktree environment."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "replicate": 2,
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Query used basename 'CLAUDE.md' which collides with 11 other files in the vault. The Obsidian CLI resolved to one file, but it is unclear which one. The 0 backlinks count applies only to whichever file the CLI selected. To get a definitive answer, use the full path (e.g., 'concept-gate-codex-mcp-wt/CLAUDE.md' or 'concept-gate-taxonomy/CLAUDE.md')"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "replicate": 3,
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "11 other files in the vault share the basename 'CLAUDE.md' across different worktrees. Consumers must use exact path resolution to avoid ambiguity, not basename-only lookup."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "replicate": 4,
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "11 other files in the vault share the basename 'CLAUDE.md' across various worktrees and archive directories. Any unqualified reference to 'CLAUDE.md' by basename alone could be ambiguous. Consumers must use exact paths to reliably reference this specific file."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "replicate": 0,
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "Queried file is root-level CLAUDE.md; 11 other files share this basename across worktrees and archived directories. Consumers must use exact paths to disambiguate, not basename alone. The count applies specifically to the root-level file, not to CLAUDE.md in concept-gate-codex-mcp-wt/ or other locations."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "replicate": 1,
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "11 other files in the vault share the basename 'CLAUDE.md' in different locations (worktrees and archives). Ensure any reference resolves by full path, not basename, to avoid ambiguity."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "replicate": 2,
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "11 other files in the vault share the basename 'CLAUDE.md', making path-based resolution critical for accuracy. The queried path is /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md, but identical basenames exist in 11 other locations (worktrees and archive)."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "replicate": 3,
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "This file shares the basename 'CLAUDE.md' with 11 other files across the vault in different directories and worktrees. Future queries should use the full path (not just basename) to avoid ambiguity."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "replicate": 4,
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "This file shares the basename 'CLAUDE.md' with 11 other files across the vault (active worktrees, archived worktrees, and nested worktrees). Consumers must resolve by exact path, not basename, to avoid collisions.",
+          "The 4 backlinks returned are for the root-level /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md, distinct from concept-gate-codex-mcp-wt/CLAUDE.md and the 10 others."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    }
+  ]
+}
