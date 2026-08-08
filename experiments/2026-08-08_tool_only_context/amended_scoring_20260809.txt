@@ -1,0 +1,89 @@
+EMPIRICAL_TRIAL_SET: provenance contract satisfied
+{
+  "cells": {
+    "T0__A_backend_failure": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T0__B_genuine_zero": {
+      "n": 5,
+      "clean": 2,
+      "codes": {
+        "Z2": 3
+      }
+    },
+    "T0__C_all_out_of_scope": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T0__D_real_hits_with_review": {
+      "n": 5,
+      "clean": 3,
+      "codes": {
+        "Z6": 2
+      }
+    },
+    "T1__A_backend_failure": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T1__B_genuine_zero": {
+      "n": 5,
+      "clean": 2,
+      "codes": {
+        "Z2": 3
+      }
+    },
+    "T1__C_all_out_of_scope": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T1__D_real_hits_with_review": {
+      "n": 5,
+      "clean": 4,
+      "codes": {
+        "Z6": 1
+      }
+    },
+    "T2__A_backend_failure": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T2__B_genuine_zero": {
+      "n": 5,
+      "clean": 1,
+      "codes": {
+        "Z2": 4
+      }
+    },
+    "T2__C_all_out_of_scope": {
+      "n": 5,
+      "clean": 5,
+      "codes": {}
+    },
+    "T2__D_real_hits_with_review": {
+      "n": 5,
+      "clean": 2,
+      "codes": {
+        "Z6": 3
+      }
+    }
+  },
+  "primary_threshold": {
+    "metric": "Z1 count, arm T1, case A_backend_failure",
+    "observed": 0,
+    "pass_bar": 0,
+    "passed": true
+  },
+  "secondary_threshold": {
+    "metric": "Z2 count, arm T1, case B_genuine_zero",
+    "observed": 3,
+    "pass_bar": 0,
+    "passed": false
+  }
+}

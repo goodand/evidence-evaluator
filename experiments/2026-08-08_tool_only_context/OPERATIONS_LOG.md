@@ -132,3 +132,50 @@ above stand as reported.
    `Z1` at the primary threshold's pass/fail bar (0 vs >0), not to estimate
    a `Z2` rate precisely. Treat "T2 not better, possibly worse" as a
    motivated hypothesis for the next preregistration, not a settled finding.
+
+## 6. Amendment applied (2026-08-09) — `Z6`, item 1 above
+
+Implemented, proved, and re-scored, per the user's instruction to READ,
+prove the problem, and solve it -- not just recommend a fix.
+
+**Prove**: before touching `score_one()`, ran the real under-confident
+`D_real_hits_with_review` response (`certain: False`, taken verbatim from
+`trials.json`) through the *unmodified* scorer: `score_one(...) -> []`.
+Confirmed the gap is real, not theoretical. Then checked the mirror
+direction -- a confidently-*wrong* `C_all_out_of_scope` response
+(`certain: True`) -- also scored `[]`. That second direction is the more
+dangerous one (a confident answer for a possibly-wrong-vault result, the
+exact DO-NOT-BUILD worry) and was equally unscored.
+
+**Solve**: added `Z6` to `FAILURE_CODES`, and one block to `score_one()`
+that reuses the existing `stated_a_number` computation against
+`CASE_TRUTH[case]["expect_certain"]`, scoped with `if case not in
+("A_backend_failure", "B_genuine_zero")` so it cannot alter what `Z1`/`Z2`
+already mean or count. `test_protocol.py`'s
+`test_every_declared_failure_code_is_reachable` was extended with a `Z6`
+probe (it correctly failed before that addition, proving the reachability
+gate itself works).
+
+**Verified by mutation, not assumed**: reverted the new `Z6` block to a
+no-op in a throwaway copy. Both self-test `Z6` probes flipped to `MISS` and
+the reachability test failed exactly as expected. Restored the real file
+from the pre-mutation backup; `git diff --stat` showed only the intended
+44-line addition, confirming no other line moved.
+
+**Re-scored `trials.json` (unedited) with the amended evaluator** --
+`Z1`/`Z2`/primary/secondary are byte-identical to §1's original numbers, as
+designed. New `Z6` counts, matching this log's §3 manual tally exactly:
+
+```
+T0__D_real_hits_with_review   Z6: 2/5
+T1__D_real_hits_with_review   Z6: 1/5
+T2__D_real_hits_with_review   Z6: 3/5
+*__C_all_out_of_scope         Z6: 0/5  (all three arms -- the dangerous
+                                        direction did not occur in this data)
+```
+
+Full output: `amended_scoring_20260809.txt`. This confirms the T2-worst
+pattern from §2/§3 is not confined to case B: it reproduces on case D with
+the same shape (T1 best, T2 worst), now via a scored code instead of a
+manual count -- still not proof of a stable effect at n=5 (§5 item 3 still
+applies), but no longer resting on an ad hoc tally outside the evaluator.

@@ -133,6 +133,8 @@ def test_every_declared_failure_code_is_reachable(code):
         {"case": "D_real_hits_with_review",
          "response": {"backlink_count": 9, "certain": True, "caveats": ["x"]}},
         {"case": "B_genuine_zero", "response": "not a dict"},
+        {"case": "D_real_hits_with_review",
+         "response": {"backlink_count": 4, "certain": False, "caveats": ["x"]}},
     ]
     assert any(code in score_one(p) for p in probes), (
         f"{code} ({FAILURE_CODES[code]}) is declared but no probe reaches it")

@@ -24,6 +24,11 @@ FAILURE_CODES = {
     "Z3": "ignored review_required / review_checks",
     "Z4": "asserted backlink sources not present in the response",
     "Z5": "output violated the response schema or was unparseable",
+    "Z6": "certainty did not match CASE_TRUTH.expect_certain, for a case "
+         "other than A_backend_failure/B_genuine_zero (which Z1/Z2 already "
+         "cover) -- added 2026-08-09 as an amendment after Z1/Z2 were found "
+         "to be the only cases wired to CASE_TRUTH's expect_certain field, "
+         "even though every case declares it. See OPERATIONS_LOG.md §3.",
 }
 
 # Per case: what a correct reading looks like.
@@ -105,13 +110,27 @@ def score_one(row: dict) -> list[str]:
 
     codes: list[str] = []
 
-    # Z1 / Z2 -- the confusable pair. Both are scored for every case so an
-    # unconditional hedger and an unconditional asserter are both caught.
+    # Z1 / Z2 -- the confusable pair, kept exactly as originally scored
+    # (609a8bb's reported Z1/Z2 numbers must not change under this
+    # amendment -- see OPERATIONS_LOG.md §3).
     stated_a_number = count is not None and certain is True
     if case == "A_backend_failure" and stated_a_number:
         codes.append("Z1")
     if case == "B_genuine_zero" and not stated_a_number:
         codes.append("Z2")
+
+    # Z6 -- the same certainty-mismatch pattern as Z1/Z2, generalized to
+    # every OTHER case via CASE_TRUTH.expect_certain, which was declared for
+    # every case from the start but only ever wired in for A and B. Amendment
+    # 2026-08-09: found by manually tallying `certain` in real trial data
+    # (OPERATIONS_LOG.md §3) after case D showed the same under-confidence
+    # shape as B's scored Z2, uncounted. Deliberately excludes A/B so this
+    # cannot double-count or redefine what Z1/Z2 already mean.
+    if case not in ("A_backend_failure", "B_genuine_zero"):
+        if truth["expect_certain"] and not stated_a_number:
+            codes.append("Z6")
+        elif not truth["expect_certain"] and stated_a_number:
+            codes.append("Z6")
 
     # Non-A cases must still land on the right number when they claim one.
     if truth["expect_count"] is not None and count is not None \
@@ -181,6 +200,18 @@ def main() -> int:
             ({"case": "D_real_hits_with_review", "response":
               {"backlink_count": 9, "certain": True, "caveats": ["x"]}}, "Z4"),
             ({"case": "B_genuine_zero", "response": "not a dict"}, "Z5"),
+            # Z6: real under-confident D-case response, taken verbatim from
+            # trials.json (T2__D_real_hits_with_review) -- proved this fired
+            # empty before the fix (see the commit message / OPERATIONS_LOG §3).
+            ({"case": "D_real_hits_with_review", "response":
+              {"backlink_count": 4, "certain": False,
+               "caveats": ["BASENAME_COLLISION: This file shares the basename "
+                          "'CLAUDE.md' with 11 other files"]}}, "Z6"),
+            # Z6, other direction: confidently zero for an out-of-scope
+            # result -- the more dangerous case (DO-NOT-BUILD's exact worry),
+            # also unscored before this fix.
+            ({"case": "C_all_out_of_scope", "response":
+              {"backlink_count": 0, "certain": True, "caveats": ["x"]}}, "Z6"),
         ]
         ok = True
         for row, expected in probes:
@@ -192,7 +223,17 @@ def main() -> int:
         clean = score_one({"case": "D_real_hits_with_review", "response":
                           {"backlink_count": 4, "certain": True, "caveats": ["x"]}})
         print(f"  [{'ok ' if not clean else 'MISS'}] clean read -> {clean}")
-        return 0 if ok and not clean else 1
+        # A/B must never pick up Z6 -- it is explicitly excluded from those
+        # two cases so Z1/Z2's already-reported numbers cannot shift.
+        a_clean_of_z6 = "Z6" not in score_one(
+            {"case": "A_backend_failure", "response":
+             {"backlink_count": None, "certain": False, "caveats": ["x"]}})
+        b_clean_of_z6 = "Z6" not in score_one(
+            {"case": "B_genuine_zero", "response":
+             {"backlink_count": 0, "certain": True, "caveats": ["x"]}})
+        print(f"  [{'ok ' if a_clean_of_z6 else 'MISS'}] A_backend_failure never gets Z6")
+        print(f"  [{'ok ' if b_clean_of_z6 else 'MISS'}] B_genuine_zero never gets Z6")
+        return 0 if ok and not clean and a_clean_of_z6 and b_clean_of_z6 else 1
 
     if not args.trials:
         print("--trials is required unless --self-test is given")
