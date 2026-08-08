@@ -4,35 +4,64 @@ workspace's own rule against hand-duplicating code across trees (`CLAUDE.md`,
 "worktree 사이로 파일을 손으로 복사하지 말 것"). `.vault-harness/` is a
 protected dirty worktree there: read and import only, never edited.
 
-MEASURED BEFORE WRITING THIS FILE (2026-08-08) -- vault switching over the
-Obsidian CLI is genuinely unreliable, not a single clean failure mode:
+MEASURED BEFORE WRITING THIS FILE, then re-diagnosed (2026-08-08). Two
+INDEPENDENT defects were confirmed; an earlier draft of this docstring
+conflated them into one vague "vault switching is unreliable" claim, which
+was wrong about the second.
 
-- Querying `vault="perfect-structure-goodantak"` for `CLAUDE.md` (a file
-  that exists ONLY in `Project_in_progress`) returned `Project_in_progress`'s
-  real backlink data instead of "not found" -- with `cwd` left at an
-  unrelated directory.
-- Re-running the *same* query with `cwd` set to the target vault's own root
-  (as `graph_for_candidate()` already does) sometimes then correctly
-  answered "not found" -- so `cwd` is not irrelevant.
-- But a genuinely-existing file *inside* that same target vault
-  (`docs/stage3_adaptive_retrieval_recovery_architecture.md`, confirmed
-  present on disk) was ALSO reported "not found" immediately after that
-  vault appeared to become active.
-- A raw vault-switch attempt hung past a 120s timeout on one attempt and
-  returned near-instantly on others.
+**Defect 1 -- `vault=` is ignored; `cwd` is what selects the vault.**
+With `cwd` at `Project_in_progress`, querying
+`vault="perfect-structure-goodantak"` for `CLAUDE.md` -- a file that exists
+only in `Project_in_progress` -- returns `Project_in_progress`'s real
+backlinks. Running the identical query with `cwd` set to the goodantak vault
+root correctly answers `Error: File "CLAUDE.md" not found.` So the CLI
+answers from whatever vault `cwd` sits in and the `vault=` argument does not
+override it. `graph_for_candidate()` already passes `cwd=vault_root`, which
+is why reusing it (rather than shelling out directly) matters.
 
-Net: switching which vault the CLI answers from is IPC-mediated, latency-
-variable, and was observed to return both stale-vault and not-yet-indexed
-answers in the same short test session. No sequence of `vault=`/`cwd`
-arguments measured here reached a state where "the CLI says X" could be
-trusted as "X is true of vault_id" without independent confirmation.
+**Defect 2 -- Obsidian does not index symlinked paths.**
+`docs/stage3_adaptive_retrieval_recovery_architecture.md` in the goodantak
+vault was reported "not found" even with `cwd` correct. It is a **symlink**:
+that vault keeps its canonical files under `knowledge/files/markdown/` and
+exposes them through symlinked directories (27 of its 97 markdown paths are
+symlinks). Querying the canonical path
+`knowledge/files/markdown/docs/stage3_adaptive_retrieval_recovery_architecture.md`
+returns 4 real backlinks. So this was never a vault-switching problem --
+Obsidian simply does not resolve symlinks into its index, and the earlier
+"a genuinely-existing file was also reported not-found" observation had a
+completely different cause than the one it was filed under.
 
-Consequence for this module and `security.py`: `graph_for_candidate()`'s own
-retry-once-on-IPC-failure (source module, `graph_for_candidate` body) is kept
-because it helps with transient single-call hiccups, but it is not treated as
-sufficient. `contracts.py` cross-checks every returned path against the
-target vault's own filesystem (`security.exists_under_root`) before trusting
-it, regardless of what `vault=`/`cwd` claim to have selected.
+Checked across all three registered vaults after a report that *some*
+symlinks do appear in Obsidian: **no queryable symlink was found.** 18 of 18
+sampled symlinked `.md` paths (8 in goodantak, 10 in Project_in_progress)
+returned "not found"; `perfect-structure` has zero symlinks; neither vault
+has exclusion rules (`.obsidian/app.json` is `{}` in both); and the same
+"not found" holds for `links`, `tags`, and `wordcount`, so it is not
+specific to `backlinks`. The canonical path works for all of them.
+
+What *does* appear, and is the likely source of that impression: the
+canonical file is indexed and reachable by its **basename** through a
+wikilink. `knowledge/.../wiki/stage3-retrieval-evaluation-moc.md` writes
+`[[stage3_adaptive_retrieval_recovery_architecture]]`, and `obsidian links`
+resolves it to the canonical `knowledge/files/markdown/docs/...` path -- not
+to the `docs/...` symlink. So the note is visible and linkable in the app
+while its symlinked path is not addressable by the CLI. Both observations
+are true at once; they are about different paths to the same note.
+
+Consequences, one per defect:
+
+1. `contracts.py` cross-checks every returned path against the target
+   vault's own filesystem (`security.exists_under_root`) before trusting it,
+   so a `cwd`-induced wrong-vault answer is dropped rather than returned.
+   This is the load-bearing safety property of this server.
+2. `security.is_symlink_under_root` raises `SYMLINK_TARGET` on the queried
+   path, so a symlink query returns "0 results + SYMLINK_TARGET +
+   ALL_RESULTS_OUT_OF_SCOPE" rather than a bare, confident zero. Verified
+   end to end against the real goodantak vault: the symlink path yields that
+   flagged empty result and the canonical path yields the 4 real backlinks.
+
+`graph_for_candidate()`'s own retry-once-on-IPC-failure is kept for transient
+hiccups but is not treated as sufficient for either defect.
 """
 
 from __future__ import annotations
