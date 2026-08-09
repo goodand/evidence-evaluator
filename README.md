@@ -116,9 +116,20 @@ corpus = Corpus(Path("your/corpus/docs"))
 case = {"contract_version": CASE_VERSION, "id": "T01", "query": "...",
         "condition": "direct-handoff", "handoff_path": "HANDOFF.md"}
 gold = {"contract_version": GOLD_VERSION, "case_id": "T01",
-        "handoff_path": "HANDOFF.md", "expected_paths": [...],
-        "critical_paths": [...], "expected_authority": [...],
-        "claims": [...], "is_absent": False}
+        "handoff_path": "HANDOFF.md",
+        "expected_paths": ["HANDOFF.md", "DESIGN.md"],
+        "critical_paths": ["DESIGN.md"],       # must be a subset of expected_paths
+        "expected_authority": ["DESIGN.md"],
+        "claims": [{"claim_id": "c1", "support_ranges": [
+            {"path": "DESIGN.md", "start": 1, "end": 4}]}],
+        # Each *_terms entry is OR-of-AND-groups. An omitted or empty list is
+        # vacuously UNsatisfiable by design (an empty expectation must not
+        # manufacture a pass), so `full_hard_gate` stays False until you
+        # supply a real term for every dimension you want it to gate on.
+        "current_state_terms": [["approach"]],
+        "next_action_terms": [["done"]],
+        "stop_condition_terms": [["found"]],
+        "is_absent": False}
 
 def my_controller(observation):
     ...  # your own logic, or wire it to providers.run_claude_cli /
@@ -162,5 +173,14 @@ install evidence-evaluator[codex-mcp]`.
 python3 -m pytest tests/ -q
 ```
 
-5 tests, no network, no model calls, no external files beyond a `tmp_path`
-fixture corpus built inline.
+21 tests, no network, no model calls, no external files beyond a `tmp_path`
+fixture corpus built inline:
+
+- `test_pipeline.py` (5) — end-to-end: build a corpus, run a scripted
+  controller, score the trace.
+- `test_failure_codes.py` (11) — one negative test per failure code
+  `evaluate()` can emit. Added after a mutation test showed a fully vacuous
+  `evaluate()` passed 3 of the original 5.
+- `test_clean_judge.py` (5) — tampers with `evaluator.py` on disk and asserts
+  on real subprocess behavior. Slower by design: the subprocess boundary *is*
+  the thing under test, so mocking it would test nothing.
