@@ -1,0 +1,155 @@
+[
+  {
+    "file": "vault_backlinks_mcp/server.py",
+    "line_or_section": "server.py:29-49 (vault_backlinks docstring, lines 42 and 45)",
+    "claim": "The docstring tells the calling agent: \"When `error` is null and `backend_used` is `\"live\"`, `backlink_count` is a real count from this call; do not downgrade your confidence in it...\" — implying `backlink_count` is a field in the tool's own JSON response.",
+    "problem": "No such field exists. Verified by reading contracts.py's actual return dict (lines 163-174: keys are `contract_version`, `vault_id`, `path`, `backend_used`, `backlinks`, `total`, `dropped_out_of_scope`, `review_required`, `review_checks`, `error`) and by `grep -rn backlink_count vault_backlinks_mcp/`, which only matches this docstring, nowhere else in the package. The real count field is `total` (a `backlinks` list plus a `total` int). `backlink_count` is actually the *experiment's* separate response-schema field name for the Haiku subject's own answer (see `_gen_prompts.py`'s `RESPONSE_SCHEMA`), which appears to have leaked into the shipped tool docstring by mistake. This is present in both the currently-shipped T3 docstring (commit d203a12) and the frozen T1 text baked into the already-scored experiment. An agent following this docstring literally will look for a key that is never in the actual response.",
+    "severity": "major",
+    "repo": "vault-backlinks-mcp",
+    "dim": "correctness"
+  },
+  {
+    "file": "vault_backlinks_mcp/contracts.py",
+    "line_or_section": "contracts.py:110-158 (the CLI-result filtering loop and ALL_RESULTS_OUT_OF_SCOPE/SOME_RESULTS_OUT_OF_SCOPE review_checks)",
+    "claim": "review_checks code `ALL_RESULTS_OUT_OF_SCOPE`/`SOME_RESULTS_OUT_OF_SCOPE` states: \"obsidian CLI returned N result(s), none of which exist under vault_id's registered root ... this likely means the Obsidian app's active vault does not match vault_id.\"",
+    "problem": "The `dropped` counter is incremented for four different reasons — a non-dict item, a missing/non-string `file` key, a forbidden path segment, or (the only case the message actually describes) failing `exists_under_root`. The review message always attributes every drop to the vault-mismatch cause regardless of which one actually happened. Reproduced directly: stubbing `fetch_backlinks` to return `[{\"file\": 12345, \"count\": \"1\"}]` (malformed non-string `file`, never reaches the `exists_under_root` check) still produces `ALL_RESULTS_OUT_OF_SCOPE` with the \"this likely means the Obsidian app's active vault does not match vault_id\" text, which is not what happened. This misleads whoever acts on `required_action` into investigating the wrong cause (does not affect the safety property itself — the malformed/out-of-scope entries are still correctly excluded from `backlinks`).",
+    "severity": "minor",
+    "repo": "vault-backlinks-mcp",
+    "dim": "correctness"
+  },
+  {
+    "file": "vault_backlinks_mcp/security.py",
+    "line_or_section": "security.py:45-47 (is_forbidden), used from contracts.py:65 and contracts.py:126",
+    "claim": "security.py's module docstring and DEFAULT_FORBIDDEN_SEGMENTS comment claim these are 'Paths that must never be exposed as a backlink source or accepted as a query target, even if the underlying CLI would happily return them' -- an unconditional allowlist-style gold-data guard.",
+    "problem": "is_forbidden() matches forbidden segments only against the literal caller-supplied (or CLI-returned) path string's Path.parts. It is never applied to the filesystem-resolved canonical path. The actual pass/fail gate, exists_under_root() (security.py:50-69), resolves symlinks and -- on this machine's default case-insensitive APFS volume -- is also case-insensitive. This creates two independently verified, silent bypasses of the guard, reproduced end-to-end through the real contracts.query_backlinks() pipeline with only the external Obsidian CLI call stubbed: (1) Symlink-alias bypass (filesystem-independent): with vault_root/hidden_gold/gold.json real and vault_root/alias -> vault_root/hidden_gold a symlink, query_backlinks(vault_id, 'alias/gold.json') passes is_forbidden (False, 'alias' isn't a forbidden segment) and passes exists_under_root (True, symlink resolves inside root). is_symlink_under_root also fails to flag it, because the final path component ('gold.json') is not itself a symlink -- only the ancestor directory is. The call proceeds and find_basename_collisions() then discloses the literal forbidden path 'hidden_gold/gold.json' inside the returned BASENAME_COLLISION review_checks message -- i.e. the guard's own path-hiding purpose is defeated by another feature of the same pipeline. (2) Case-variation bypass (case-insensitive filesystems, the macOS default): is_forbidden('Hidden_Gold/secret.md') is False while exists_under_root() still resolves and confirms the file exists via the OS's case-insensitive lookup, so a mixed-case query also clears both gates. Neither bypass is covered by any existing test: is_forbidden's only test (tests/test_security.py:47-49) checks exact-case, non-symlinked segments, and every query_backlinks forbidden-path test (tests/test_contracts.py:63-94) uses the literal 'hidden_gold/gold.json' string.",
+    "severity": "blocker",
+    "repo": "vault-backlinks-mcp",
+    "dim": "security"
+  },
+  {
+    "file": "vault_backlinks_mcp/security.py",
+    "line_or_section": "find_basename_collisions(), lines 81-94",
+    "claim": "security.py's module docstring and DEFAULT_FORBIDDEN_SEGMENTS comment (lines 21-26): \"Paths that must never be exposed as a backlink source or accepted as a query target, even if the underlying CLI would happily return them\"; contracts.py's forbidden-path error says evaluation/gold data is \"never queried or returned by this tool\".",
+    "problem": "find_basename_collisions() walks the filesystem with vault.root.rglob(name) with no is_forbidden filtering, so it returns paths that live inside a forbidden segment (hidden_gold, .git, node_modules). Verified live: querying contracts.query_backlinks('t1','target.md') against a vault containing both 'target.md' and 'hidden_gold/target.md' returns a BASENAME_COLLISION review_check whose required_action string literally names 'hidden_gold/target.md' -- the path/existence of a gold file leaked through the one code path that isn't gated by is_forbidden. No test in test_security.py or test_contracts.py exercises a basename collision inside a forbidden directory, so this went undetected by the suite.",
+    "severity": "blocker",
+    "repo": "vault-backlinks-mcp",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "vault_backlinks_mcp/security.py",
+    "line_or_section": "is_forbidden(), line 45; used in contracts.py:65 and contracts.py:126",
+    "claim": "Same docstring guarantee as above: a forbidden path must never be \"accepted as a query target, even if the underlying CLI would happily return them.\"",
+    "problem": "is_forbidden() only checks the literal string of the path (Path(path).parts membership), never the filesystem target it resolves to. A symlink located outside any forbidden directory (e.g. docs/backdoor.md) that points at a file inside hidden_gold passes is_forbidden(clean_path), passes exists_under_root() (which resolves the symlink and confirms the resolved file is under the vault root), and is then handed to fetch_backlinks() -- the live external Obsidian CLI call the docstring says a forbidden target should never reach. Verified live: contracts.query_backlinks() accepts such a symlink as a query target and reaches the backend (backend_used: \"live\"); it only avoids returning useful data incidentally, because the CLI's answer then gets dropped as out-of-scope. The identical literal-text-only check is applied to CLI-returned source paths at contracts.py:126, so a symlinked alias in a result would bypass filtering there too.",
+    "severity": "major",
+    "repo": "vault-backlinks-mcp",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "vault_backlinks_mcp/server.py",
+    "line_or_section": "vault_backlinks() docstring, lines 42-48 (added in commit d203a12)",
+    "claim": "\"...When `error` is null and `backend_used` is `\"live\"`, `backlink_count` is a real count from this call...\" -- describing the actual JSON this MCP tool returns to a real caller.",
+    "problem": "The tool's actual return value (contracts.query_backlinks) never contains a key named backlink_count -- verified by reading both return sites in contracts.py and by executing the pipeline; the real keys are contract_version, vault_id, path, backend_used, backlinks, total, dropped_out_of_scope, review_required, review_checks, error. `backlink_count` is only the name of a field in the experiment's separate, synthetic RESPONSE_SCHEMA (_gen_prompts.py) that asks an LLM subject to produce its own structured answer -- that name was copied verbatim into the real production docstring when the T3 fix was written, conflating the subject's answer schema with the tool's actual output schema. A real MCP caller reading this docstring and then looking for response['backlink_count'] would find nothing; the real field is `total`.",
+    "severity": "major",
+    "repo": "vault-backlinks-mcp",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "vault_backlinks_mcp/contracts.py",
+    "line_or_section": "dropped counter and ALL_RESULTS_OUT_OF_SCOPE/SOME_RESULTS_OUT_OF_SCOPE review_check, lines 110-158",
+    "claim": "review_check text: \"obsidian CLI returned N result(s), none of which exist under vault_id ...'s registered root ... this likely means the Obsidian app's active vault does not match vault_id.\"",
+    "problem": "The single `dropped` counter is incremented for three distinct reasons -- malformed/non-dict items, forbidden-segment matches, and the real out-of-scope check (exists_under_root == False) -- but the emitted review_check text unconditionally claims the drop reason was \"does not exist under the registered root\" and steers the reader toward a wrong-vault hypothesis. Verified live: a CLI result pointing at a real, on-disk file inside hidden_gold (which does exist under the vault root and is only dropped for being forbidden) still yields dropped_out_of_scope: 1 and an ALL_RESULTS_OUT_OF_SCOPE message falsely stating none of the results exist under the registered root and suggesting the wrong Obsidian vault is open -- an incorrect diagnosis for what is actually a working security filter doing its job.",
+    "severity": "minor",
+    "repo": "vault-backlinks-mcp",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "evidence_evaluator/evaluator.py",
+    "line": 228,
+    "claim": "Module docstring: run_clean_judge()/--verify-self 'verifies this evaluator's own source has not been patched before scoring anything with it', via a subprocess hash check.",
+    "problem": "run_clean_judge(payload_path, pins=None) has pins default to None, and every call site that would exercise it (there are zero in this repo/tests) risks omitting pins. When pins is None/omitted, the subprocess runs `--verify-self` without `--pins`, so `if args.verify_self and args.pins:` is False and the source-hash drift check never executes — the judge silently scores the payload as if nothing were wrong. Verified empirically: patched evaluate() in-place to always return a fabricated clean-pass result, then called run_clean_judge() with the correct pre-tamper pins (correctly detected drift, returncode 3) versus without pins (silently returned the fabricated `{\"full_hard_gate\": true, \"failure_codes\": [], \"TAMPERED\": true}` with no error, no warning, exit 0). The integrity mechanism the module docstring advertises as the whole reason for the subprocess design does not fire on its own default/untested code path.",
+    "severity": "blocker",
+    "repo": "evidence-evaluator",
+    "dim": "correctness"
+  },
+  {
+    "file": "README.md",
+    "line": 165,
+    "claim": "\"5 tests, no network, no model calls, no external files beyond a tmp_path fixture corpus built inline.\"",
+    "problem": "Stale count. Commit 9e13b47 added tests/test_failure_codes.py with 11 new test functions specifically to fix vacuous coverage, bringing the total from 5 to 16 (`python3 -m pytest tests/ -q` prints '16 passed'), but the README's Tests section at the bottom was never updated to reflect this.",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "correctness"
+  },
+  {
+    "file": "evidence_evaluator/evaluator.py",
+    "line_or_section": "lines 9-23 (module docstring), 228-242 (run_clean_judge)",
+    "claim": "run_clean_judge() 'verifies this evaluator's own source has not been patched before scoring anything with it' by running the self-hash check inside an isolated subprocess.",
+    "problem": "The self-hash check is entirely gated on the optional `pins` argument (default None): `run_clean_judge()` only appends `--pins` to argv `if pins:`, and inside `main()` the drift check only runs `if args.verify_self and args.pins:`. Verified directly: calling `evaluator.run_clean_judge(payload_path, pins=None)` succeeds and returns a normal-looking scoring result (`{\"case_id\": ..., \"full_hard_gate\": false, ...}`) with no field, warning, or exception indicating that zero integrity verification occurred — indistinguishable from a properly verified run. The README documents none of the emit-pins/store/pass-in workflow needed to actually get this guarantee (the calibration machinery that used pins was deliberately left in the source workspace), so a caller who omits `pins` silently gets no protection at all while believing the 'clean judge' ran.",
+    "severity": "major",
+    "repo": "evidence-evaluator",
+    "dim": "security"
+  },
+  {
+    "file": "evidence_evaluator/providers.py",
+    "line_or_section": "validate_against_schema(), lines 176-215",
+    "claim": "'Validate every JSON-schema keyword used by the two response schemas' / README: 'Validate the returned payload against a JSON Schema before it's trusted.'",
+    "problem": "The function only recognizes `schema[\"type\"] in {object, array, string, boolean, integer}` plus `const`/`enum`. Any schema node without a literal `type` key (`oneOf`, `anyOf`, `allOf`, `$ref`, `not`, `patternProperties`, etc.) falls through every branch and passes silently with no exception. Verified directly: schema `{'oneOf': [{'type':'object','required':['answer_text'],...}]}` against payload `{'totally':'wrong','shape':123}` (which satisfies none of the intended structure) raises nothing. Severity reduced because providers.py's own comment says this is defense-in-depth ('Native schema enforcement is primary') and the two example schemas used in the source experiment do put `type` at top level — but any future/edited schema using standard JSON-Schema composition keywords will silently bypass this secondary check. Pre-existing in the source experiment's `_providers.py`, not introduced by extraction.",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "security"
+  },
+  {
+    "file": "README.md",
+    "line_or_section": "lines 105-131 (Quickstart code block)",
+    "claim": "Quickstart is presented as runnable sample code; commit 9e13b47 states it was verified by 'literally executing the example' ('README quickstart's Corpus/import lines executed directly against a scratch corpus, not just read').",
+    "problem": "`gold`'s `expected_paths`/`critical_paths`/`expected_authority`/`claims` values are written as bare `[...]` — a Python list containing the literal `Ellipsis` object — instead of a quoted placeholder like `case[\"query\"]`'s `\"...\"`. Reproduced by executing the quickstart verbatim: `evaluate(trace, gold, case)` raises an uncaught `contract.ContractError: expected_paths must be a list of repo-relative paths.` from `validate_gold()`, which runs unconditionally before any try/except in `evaluate()`. The commit's verification claim covers only the Corpus/import lines, not the full snippet through `evaluate()`, so the claim is narrowly true but misleading about full-example coverage.",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "security"
+  },
+  {
+    "file": "README.md",
+    "line_or_section": "line 165 ('## Tests' section)",
+    "claim": "\"5 tests, no network, no model calls, no external files beyond a `tmp_path` fixture corpus built inline.\"",
+    "problem": "Stale since commit 9e13b47 added `tests/test_failure_codes.py` (11 more tests). `python3 -m pytest tests/ -q` in the current repo reports `16 passed`, not 5 — the same commit's own message says '16/16 pass' but never updated this README line.",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "security"
+  },
+  {
+    "file": "evidence_evaluator/evaluator.py",
+    "line_or_section": "run_clean_judge() (L228-242) + main() L267-274",
+    "claim": "Module docstring: 'the hash check runs INSIDE that process before any scoring. Verifying in the calling process would let that process lie about the child.' README's whole 'clean judge' pitch is that this subprocess verifies the evaluator's own source is unpatched before trusting a score.",
+    "problem": "The self-hash verification is entirely gated on the caller passing `pins`, which is an optional parameter defaulting to None, and `main()` only runs the drift check `if args.verify_self and args.pins:`. Empirically verified: calling `run_clean_judge(payload_path)` with no `pins` argument (the default, and the form implied by the docstring/README, which never mentions pins are mandatory for the check to mean anything) spawns the sandboxed subprocess, which silently skips all hash comparison and returns a normal-looking scored result -- no error, no warning, no field indicating verification was skipped. I reproduced this directly: `run_clean_judge(payload)` with no pins returns a clean result even though nothing was checked, while the same call with `pins=source_hashes()` correctly returns `{'judge_error': 'judge source drifted: [...]'}` when contract.py's hash is tampered. So the entire feature this module exists for (defeating a hash-matched-but-patched-bytecode attack) silently no-ops unless every caller remembers to separately supply pins -- exactly the failure mode the module's own docstring says it was built to prevent.",
+    "severity": "blocker",
+    "repo": "evidence-evaluator",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "evidence_evaluator/evaluator.py",
+    "line_or_section": "run_clean_judge / --verify-self / --pins / --emit-pins (L228-283)",
+    "claim": "README 'Tests' section: '5 tests, no network, no model calls, no external files' (now 16 tests) implies the whole engine's behavior is exercised by the test suite.",
+    "problem": "No test in tests/ calls `run_clean_judge`, passes `--verify-self`, or exercises the drift-detection path at all (grep confirms zero references outside evaluator.py itself). In the source experiment this package was extracted from, every caller of the equivalent function (`test_protocol.py`, `run_calibration.py`, `run_smoke.py`, `run_live_phase_c.py`) always supplied `pins=source_hashes()`, so the always-verify behavior was implicitly exercised there. That safety net did not travel with the extraction: the mechanism is present in the shipped code but completely untested here, so a regression in it (such as the blocker above) would pass every gate in this repo.",
+    "severity": "major",
+    "repo": "evidence-evaluator",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": "README.md",
+    "line_or_section": "## Tests (line ~161-166)",
+    "claim": "\"5 tests, no network, no model calls, no external files beyond a `tmp_path` fixture corpus built inline.\"",
+    "problem": "Stale count. `python3 -m pytest tests/ -q` actually collects and passes 16 tests (5 in test_pipeline.py + 11 in test_failure_codes.py). test_failure_codes.py was added in commit 9e13b47 specifically to close the vacuous-evaluate() gap the mutation test found, but the README's Tests section was never updated to reflect it, so a reader trusting this line would materially undercount the coverage this repo actually claims to have (and would not know test_failure_codes.py exists at all from this section).",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "claims-vs-code"
+  },
+  {
+    "file": ".gitignore",
+    "line_or_section": "whole file / repo root",
+    "claim": "Implicit: this repo is ready to be pushed clean to a fresh, empty GitHub remote.",
+    "problem": ".claude/worktrees/fix-review-defects/ is an untracked, non-gitignored nested git worktree (confirmed via its `.git` gitlink file pointing at `.git/worktrees/fix-review-defects`) sitting inside the repo. `git status --short` shows it collapsed to a single `?? .claude/` line rather than being ignored. It contains a second, already-diverged copy of evidence_evaluator/ and tests/ (byte-diff confirmed: contract.cpython-313.pyc, evaluator.cpython-313.pyc, runner.cpython-313.pyc differ from the main tree's, and mcp_bridge/providers/subject_tool .pyc files exist only in the worktree copy) plus its own __pycache__/.pytest_cache. Nothing in .gitignore excludes .claude/, so a routine `git add -A` or `git add .` before the push would stage this nested worktree as a gitlink/untracked tree rather than skipping it, re-creating exactly the 'two copies, one edited, false green' duplication risk this workspace's own root CLAUDE.md warns about -- worth excluding before the push this task says is imminent.",
+    "severity": "minor",
+    "repo": "evidence-evaluator",
+    "dim": "claims-vs-code"
+  }
+]
