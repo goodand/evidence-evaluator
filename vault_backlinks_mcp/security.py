@@ -103,12 +103,27 @@ def exists_under_root(vault: VaultEntry, path: str) -> bool:
 
 
 def is_symlink_under_root(vault: VaultEntry, path: str) -> bool:
-    """A backlink source that is itself a symlink should not be reported as
-    a canonical authority -- see notes/audits/vault/symlink-vs-moc-2026-07-30
-    in the source workspace for why a symlink and its target are not
-    interchangeable for provenance purposes."""
-    candidate = vault.root / path
-    return candidate.is_symlink()
+    """A backlink source that is itself a symlink -- or reached through a
+    symlinked ANCESTOR directory -- should not be reported as a canonical
+    authority. See notes/audits/vault/symlink-vs-moc-2026-07-30 in the source
+    workspace for why a symlink and its target are not interchangeable for
+    provenance purposes.
+
+    Checking only the final component is not sufficient: reproduced
+    2026-08-09 (independent adversarial review of the .vault-harness reuse
+    contract) -- `alias/target.md` where `alias` is a symlinked directory and
+    `target.md` itself is a real file passed `exists_under_root() == True`
+    while this check (final-component-only) returned False. If Obsidian does
+    not index that symlinked-parent path, the result is a confident, wrong
+    zero: `review_required=False`, `total=0`, with no signal that the path is
+    unqueryable rather than genuinely backlink-free.
+    """
+    current = vault.root
+    for part in Path(path).parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
 
 
 def find_basename_collisions(vault: VaultEntry, path: str) -> list[str]:
@@ -120,12 +135,20 @@ def find_basename_collisions(vault: VaultEntry, path: str) -> list[str]:
     mode this server exists partly to avoid (same-named files across
     worktrees resolved to the wrong one).
 
-    Forbidden paths are excluded from the result. Without that filter this
-    function leaked them: reproduced 2026-08-09 (adversarial review finding
-    #3) -- a vault containing both `target.md` and `hidden_gold/target.md`
-    produced a BASENAME_COLLISION `required_action` naming
-    `hidden_gold/target.md` verbatim, disclosing the existence and path of a
-    gold file through the one code path that was not gated by `is_forbidden`.
+    Forbidden paths are excluded from the result via `is_forbidden_resolved`,
+    not the literal-only `is_forbidden`. Without that, this function leaked
+    protected paths two different ways, both reproduced end to end:
+
+    - 2026-08-09 (adversarial review finding #3): a vault containing both
+      `target.md` and `hidden_gold/target.md` produced a BASENAME_COLLISION
+      `required_action` naming `hidden_gold/target.md` verbatim.
+    - 2026-08-09 (independent review of the .vault-harness reuse contract,
+      finding #5): a plain-looking path (`docs/target.md`) that is itself a
+      *symlink into* `hidden_gold/target.md` passed the literal `is_forbidden`
+      check (its own path string names no forbidden segment) and still
+      appeared in the collision list -- the same symlink-alias bypass that
+      `is_forbidden_resolved` exists to close, just reached through this
+      function instead of the main query path.
     """
     name = Path(path).name
     out = []
@@ -134,7 +157,7 @@ def find_basename_collisions(vault: VaultEntry, path: str) -> list[str]:
             relative = str(p.relative_to(vault.root))
         except ValueError:
             continue
-        if relative == path or is_forbidden(relative):
+        if relative == path or is_forbidden_resolved(vault, relative):
             continue
         out.append(relative)
     return sorted(out)

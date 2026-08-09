@@ -30,19 +30,21 @@ from __future__ import annotations
 
 from registry import RegistryError, VaultEntry, load_registry, resolve_vault
 from obsidian_backend import ObsidianUnavailable, fetch_backlinks
-from security import (PathSecurityError, find_basename_collisions, is_forbidden,
+from security import (DEFAULT_FORBIDDEN_SEGMENTS, PathSecurityError,
+                      find_basename_collisions, is_forbidden,
                       is_forbidden_resolved, is_symlink_under_root,
                       exists_under_root, validate_relative_path)
 
 CONTRACT_VERSION = "vault-backlinks-result-v1"
 DEFAULT_MAX_RESULTS = 50
+MAX_RESULTS_UPPER_BOUND = 1000
 
 
 def _error_result(vault_id: str, path: str, message: str, *,
                   review_checks: list[dict] | None = None) -> dict:
     return {
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": path,
-        "backend_used": "none", "backlinks": None, "total": 0,
+        "backend_used": "none", "backlinks": None, "total": 0, "returned_count": 0,
         "dropped_out_of_scope": 0,
         "dropped_by_reason": {"malformed": 0, "forbidden": 0, "out_of_scope": 0},
         "review_required": bool(review_checks), "review_checks": review_checks or [],
@@ -58,6 +60,17 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
     result with backend_used="none" and a specific `error`, per the
     DO-NOT-BUILD ruling's core rule: never turn a failure into a silent
     empty/zero result that reads the same as "confirmed no backlinks"."""
+    # `max_results` must be validated, not trusted -- reproduced 2026-08-09
+    # (independent review of the .vault-harness reuse contract, finding #3):
+    # a negative value (`-1`) was never rejected and silently returned a
+    # Python-slice-semantics result (`kept[:-1]`, i.e. "all but the last
+    # item") instead of an error or an empty list.
+    if (not isinstance(max_results, int) or isinstance(max_results, bool)
+            or not (1 <= max_results <= MAX_RESULTS_UPPER_BOUND)):
+        return _error_result(
+            vault_id, path,
+            f"max_results must be an integer in [1, {MAX_RESULTS_UPPER_BOUND}], "
+            f"got {max_results!r}")
     try:
         clean_path = validate_relative_path(path)
     except PathSecurityError as exc:
@@ -65,8 +78,9 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
 
     if is_forbidden(clean_path):
         return _error_result(vault_id, clean_path,
-                             "path matches a forbidden segment (evaluation/gold data "
-                             "is never queried or returned by this tool)")
+                             f"path matches a forbidden segment "
+                             f"({', '.join(DEFAULT_FORBIDDEN_SEGMENTS)} are never queried "
+                             f"or returned by this tool)")
 
     reg = registry if registry is not None else load_registry()
     try:
@@ -82,9 +96,9 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
     # external CLI.
     if is_forbidden_resolved(vault, clean_path):
         return _error_result(vault_id, clean_path,
-                             "path resolves inside a forbidden segment "
-                             "(evaluation/gold data is never queried or "
-                             "returned by this tool)")
+                             f"path resolves inside a forbidden segment "
+                             f"({', '.join(DEFAULT_FORBIDDEN_SEGMENTS)} are never queried "
+                             f"or returned by this tool)")
 
     if not exists_under_root(vault, clean_path):
         return _error_result(
@@ -199,12 +213,20 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
                                 f"check."),
         })
 
-    truncated = len(kept) > max_results
-    kept = kept[:max_results]
+    # `total` must be the real count BEFORE truncation. Reproduced 2026-08-09
+    # (independent review of the .vault-harness reuse contract, finding #3):
+    # this used to slice `kept` first and then report `len(kept)` as `total`,
+    # so 2 real results with `max_results=1` reported `total=1` -- a caller
+    # reading only `total` had no way to tell "there is exactly one backlink"
+    # from "there are more, but you only asked to see one".
+    total_available = len(kept)
+    truncated = total_available > max_results
+    returned = kept[:max_results]
 
     return {
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": clean_path,
-        "backend_used": "live", "backlinks": kept, "total": len(kept),
+        "backend_used": "live", "backlinks": returned, "total": total_available,
+        "returned_count": len(returned),
         # `dropped_out_of_scope` now means exactly what it says -- only the
         # vault-root failures. `dropped_by_reason` carries the full picture
         # so a caller can tell a security filter doing its job apart from a

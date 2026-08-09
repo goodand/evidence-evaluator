@@ -121,13 +121,24 @@ caught automatically here instead.
 python3 -m pytest tests/ -q
 ```
 
-21 tests. `test_security.py` exercises path/symlink/collision checks
-directly against a `tmp_path` fixture vault. `test_contracts.py` drives the
-full `query_backlinks()` pipeline with a fake `graph_for_candidate` standing
-in for the *external* IPC call only — registry lookup, path safety, the
-vault-root cross-check, and result shaping are this package's own code and
-run for real, including a regression test for the raw-string CLI fallback
-bug found while testing against a real vault.
+43 tests across four files. `test_security.py` exercises path/symlink/
+collision checks directly against a `tmp_path` fixture vault.
+`test_registry.py` exercises registry-file validation (malformed entries
+must become `RegistryError`, never an uncaught exception). `test_contracts.py`
+drives the full `query_backlinks()` pipeline with a fake `fetch_backlinks`
+standing in for the *external* IPC call only — registry lookup, path safety,
+the vault-root cross-check, and result shaping are this package's own code
+and run for real. `test_obsidian_backend.py` exercises the actual CLI-command
+construction and retry logic with a fake subprocess runner (`run_fn`), not a
+faked-away `fetch_backlinks`.
+
+**What none of these 43 tests cover**: the real `fastmcp` stdio registration
+in `server.py`. `fastmcp` is not installed in the environment this suite has
+been run in so far, so `@mcp.tool` registration, argument marshalling, and
+the `readOnlyHint` annotation have only been read, never executed. If you
+have `fastmcp` installed, running `python3 vault_backlinks_mcp/server.py`
+and issuing a real `vault_backlinks` call is the only way to close that gap
+today; no smoke test for it exists yet.
 
 ## What this does not do
 

@@ -62,22 +62,54 @@ Consequences, one per defect:
 
 `graph_for_candidate()`'s own retry-once-on-IPC-failure is kept for transient
 hiccups but is not treated as sufficient for either defect.
+
+PORTABILITY (finding #2, independent review of this reuse contract,
+2026-08-09) -- the harness directory used to be a hardcoded
+`Path.home() / "Desktop" / "Project_in_progress" / ...`, which only worked on
+the one machine, one user account, and one directory layout this server was
+first written under. `VAULT_HARNESS_DIR` now overrides it; the hardcoded path
+remains only as the default for that one original deployment. This does not
+version the harness's API -- a caller that needs that should still pin a
+harness commit externally.
+
+SINGLE-CALL BACKLINKS (finding #4, same review) -- `graph_for_candidate()`
+always issues three CLI calls (`backlinks`, `links`, `tags`) because it is a
+general graph fetch shared with the retrieval harness's own callers. This
+server only ever reads the `backlinks` key, so the other two calls are pure
+overhead against an IPC channel already measured as unreliable (see Defect 1
+above) -- three times the chance of a transient failure for one-third the
+useful data. `fetch_backlinks()` below builds and runs only the `backlinks`
+command, reusing the harness's own `run()` subprocess wrapper and
+`parse_cli_output()` parser (both already-public, already-tested names in
+`vault_md_harness`) rather than re-implementing subprocess handling or output
+parsing. It duplicates only the small piece that has to change: which
+command to send. The retry-once-on-transient-failure behavior is copied
+verbatim from `graph_for_candidate()` since the protected harness file itself
+cannot be edited to expose it as a shared helper.
 """
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 from pathlib import Path
 
 # Read-only reuse of a protected dirty worktree -- see module docstring.
-_HARNESS_DIR = Path.home() / "Desktop" / "Project_in_progress" / ".vault-harness" / "vault-md-retrieval"
+_DEFAULT_HARNESS_DIR = (Path.home() / "Desktop" / "Project_in_progress" /
+                        ".vault-harness" / "vault-md-retrieval")
+_HARNESS_DIR = Path(os.environ.get("VAULT_HARNESS_DIR", str(_DEFAULT_HARNESS_DIR)))
 if str(_HARNESS_DIR) not in sys.path:
     sys.path.insert(0, str(_HARNESS_DIR))
 
 try:
-    from vault_md_harness import graph_for_candidate as _graph_for_candidate
+    from vault_md_harness import OBSIDIAN as _OBSIDIAN
+    from vault_md_harness import parse_cli_output as _parse_cli_output
+    from vault_md_harness import run as _run
 except ImportError as exc:  # pragma: no cover -- environment-dependent
-    _graph_for_candidate = None
+    _OBSIDIAN = None
+    _parse_cli_output = None
+    _run = None
     _IMPORT_ERROR = exc
 else:
     _IMPORT_ERROR = None
@@ -88,35 +120,41 @@ class ObsidianUnavailable(RuntimeError):
 
 
 def fetch_backlinks(vault_root: Path, obsidian_vault_name: str, path: str, *,
-                    graph_fn=None) -> list[dict]:
+                    run_fn=None) -> list[dict]:
     """Return raw `[{"file": str, "count": str|int}]` entries, or [] for none.
 
-    Raises ObsidianUnavailable if the harness module isn't importable, or if
-    `graph_for_candidate()` reports every graph command failed (its own
-    signal for "could not get anything from Obsidian for this candidate").
+    Issues exactly one Obsidian CLI call (`backlinks`), not three -- see
+    "SINGLE-CALL BACKLINKS" in this module's docstring for why the shared
+    `graph_for_candidate()` is not used here.
 
-    `graph_fn` defaults to the imported `graph_for_candidate` and exists so
-    tests can exercise this module's own error-handling and shaping logic
-    without the real Obsidian CLI or `.vault-harness/` present -- it replaces
-    the *external* call, not the logic under test here.
+    `run_fn` defaults to the imported harness `run()` and exists so tests can
+    exercise this module's own error-handling and shaping logic without the
+    real Obsidian CLI or `.vault-harness/` present -- it replaces the
+    *external* call, not the logic under test here.
     """
-    fn = graph_fn or _graph_for_candidate
-    if fn is None:
+    runner = run_fn or _run
+    if runner is None or _parse_cli_output is None or _OBSIDIAN is None:
         raise ObsidianUnavailable(
-            f"could not import graph_for_candidate from {_HARNESS_DIR}: {_IMPORT_ERROR}")
-    graph, errors = fn(vault_root, obsidian_vault_name, path)
-    if graph is None:
-        raise ObsidianUnavailable(
-            f"obsidian CLI produced no usable result for {path!r} in vault "
-            f"{obsidian_vault_name!r}: {'; '.join(errors) or 'no error detail'}")
-    backlinks = graph.get("backlinks")
-    if backlinks is None:
-        # This one graph command failed while others (links/tags) may have
-        # succeeded -- graph_for_candidate() only returns None overall when
-        # ALL three failed, so a None here is backlinks-specific.
+            f"could not import run/parse_cli_output/OBSIDIAN from "
+            f"{_HARNESS_DIR}: {_IMPORT_ERROR}")
+    command = [_OBSIDIAN, "backlinks", f"vault={obsidian_vault_name}",
+              f"path={path}", "counts", "format=json"]
+    result = runner(command, cwd=vault_root)
+    output = result.stdout.strip()
+    error = result.stderr.strip()
+    if result.returncode != 0 or "unable to find Obsidian" in output:
+        # Retry once, exactly like graph_for_candidate() -- transient IPC
+        # hiccups are common enough that the harness itself treats one retry
+        # as normal, not exceptional.
+        time.sleep(0.2)
+        result = runner(command, cwd=vault_root)
+        output = result.stdout.strip()
+        error = result.stderr.strip()
+    if result.returncode != 0 or "unable to find Obsidian" in output:
         raise ObsidianUnavailable(
             f"obsidian CLI's backlinks command failed for {path!r}: "
-            f"{'; '.join(errors) or 'no error detail'}")
+            f"{error or output or 'no error detail'}")
+    backlinks = _parse_cli_output(output)
     if not isinstance(backlinks, list):
         raise ObsidianUnavailable(
             f"obsidian CLI backlinks output was not a list for {path!r}: {backlinks!r}")

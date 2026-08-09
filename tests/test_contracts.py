@@ -140,9 +140,70 @@ def test_max_results_truncation_is_flagged(vault, monkeypatch):
     many = [{"file": "docs/source.md", "count": "1"}] * 5
     monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
     result = contracts.query_backlinks("t1", "target.md", max_results=2, registry=vault)
-    assert result["total"] == 2
+    # Regression (2026-08-09, independent review finding #3): `total` used to
+    # be computed AFTER truncation (`len(kept[:max_results])`), so 5 real
+    # results with max_results=2 reported total=2 -- indistinguishable from
+    # "there really are only 2". `total` is the real pre-truncation count;
+    # `returned_count` is what this call actually handed back.
+    assert result["total"] == 5
+    assert result["returned_count"] == 2
+    assert len(result["backlinks"]) == 2
     codes = [c["code"] for c in result["review_checks"]]
     assert "TRUNCATED" in codes
+
+
+def test_max_results_zero_is_rejected(vault):
+    """Regression (finding #3): max_results was never validated, so 0 or a
+    negative value fell through to Python slice semantics instead of being
+    refused."""
+    result = contracts.query_backlinks("t1", "target.md", max_results=0, registry=vault)
+    assert result["error"] is not None
+    assert result["backend_used"] == "none"
+
+
+def test_max_results_negative_is_rejected(vault, monkeypatch):
+    """max_results=-1 used to silently return `kept[:-1]` ('all but the
+    last item') instead of an error -- a caller could not distinguish that
+    from a real, deliberate result."""
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda root, name, path: calls.append(1) or [])
+    result = contracts.query_backlinks("t1", "target.md", max_results=-1, registry=vault)
+    assert result["error"] is not None
+    assert calls == [], "must fail before ever calling the live backend"
+
+
+def test_max_results_above_upper_bound_is_rejected(vault):
+    result = contracts.query_backlinks(
+        "t1", "target.md", max_results=contracts.MAX_RESULTS_UPPER_BOUND + 1, registry=vault)
+    assert result["error"] is not None
+
+
+def test_forbidden_error_message_names_actual_segments_not_evaluation(vault):
+    """Regression (2026-08-09, independent review finding #7): the error
+    message used to claim 'evaluation/gold data is never queried', but the
+    actual forbidden-segment list is only hidden_gold/.git/node_modules --
+    retrieval-evaluation documents are a separate, unenforced concept here
+    (see docs/feedback/vault_harness_reuse_contract_questions_20260809.md Q4:
+    the two policies are intentionally not merged). The message must not
+    claim more than the code enforces."""
+    result = contracts.query_backlinks("t1", "hidden_gold/gold.json", registry=vault)
+    assert result["error"] is not None
+    assert "evaluation" not in result["error"].lower()
+    assert "hidden_gold" in result["error"]
+
+
+def test_evaluation_named_document_is_not_blocked_by_this_server(vault, monkeypatch):
+    """The flip side of the above: a path that only LOOKS like an evaluation
+    report (by the harness's is_evaluation_document naming convention) is not
+    a security concept here and must be queryable like any other document."""
+    (Path(vault["t1"].root) / "retrieval-evaluation-2026-08-09.md").write_text(
+        "x", encoding="utf-8")
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: [])
+    result = contracts.query_backlinks(
+        "t1", "retrieval-evaluation-2026-08-09.md", registry=vault)
+    assert result["error"] is None
+    assert result["backend_used"] == "live"
 
 
 # --- regressions from the 2026-08-09 adversarial review -------------------

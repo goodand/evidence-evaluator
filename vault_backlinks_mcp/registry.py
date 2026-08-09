@@ -49,6 +49,8 @@ def load_registry(path: Path | None = None) -> dict[str, VaultEntry]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RegistryError(f"vault registry at {path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RegistryError(f"vault registry at {path} must be a JSON object, got {type(data).__name__}")
     if data.get("contract_version") != "vault-registry-v1":
         raise RegistryError(f"vault registry at {path} has an unsupported contract_version")
     vaults = data.get("vaults")
@@ -56,6 +58,17 @@ def load_registry(path: Path | None = None) -> dict[str, VaultEntry]:
         raise RegistryError(f"vault registry at {path} declares no vaults")
     out: dict[str, VaultEntry] = {}
     for vault_id, entry in vaults.items():
+        # A malformed entry (e.g. a bare string instead of an object) must
+        # become a RegistryError, not an uncaught AttributeError -- this
+        # server's whole error contract (contracts.py) promises callers a
+        # structured `error` field, never a raw exception escaping to the
+        # MCP boundary. Reproduced 2026-08-09 (independent review of the
+        # .vault-harness reuse contract, finding #6): {"bad": "not-an-object"}
+        # crashed with `'str' object has no attribute 'get'`.
+        if not isinstance(entry, dict):
+            raise RegistryError(
+                f"vault registry entry {vault_id!r} must be an object with "
+                f"'root' and 'obsidian_vault_name', got {type(entry).__name__}")
         root = entry.get("root")
         name = entry.get("obsidian_vault_name")
         if not root or not name:
