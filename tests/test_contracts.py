@@ -7,6 +7,7 @@ shaping) is this package's own code and runs for real.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -142,3 +143,59 @@ def test_max_results_truncation_is_flagged(vault, monkeypatch):
     assert result["total"] == 2
     codes = [c["code"] for c in result["review_checks"]]
     assert "TRUNCATED" in codes
+
+
+# --- regressions from the 2026-08-09 adversarial review -------------------
+# Unit-level guards are not enough here: every one of these was a WIRING
+# failure -- the check existed but the pipeline did not apply it (or applied
+# a weaker variant). These drive query_backlinks() end to end.
+
+def test_symlink_alias_to_forbidden_dir_never_reaches_the_backend(tmp_path, monkeypatch):
+    """`alias -> hidden_gold` cleared the literal forbidden check AND
+    exists_under_root, so query_backlinks() called the external CLI with a
+    gold path. Reproduced live before the fix."""
+    (tmp_path / "hidden_gold").mkdir()
+    (tmp_path / "hidden_gold" / "gold.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "alias").symlink_to(tmp_path / "hidden_gold")
+    reg = {"t1": VaultEntry(vault_id="t1", root=tmp_path.resolve(),
+                            obsidian_vault_name="T1")}
+    calls = []
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda *a, **k: calls.append(a) or [])
+
+    result = contracts.query_backlinks("t1", "alias/gold.json", registry=reg)
+    assert result["error"] is not None
+    assert result["backend_used"] == "none"
+    assert calls == [], "must refuse before ever calling the live backend"
+
+
+def test_collision_message_never_discloses_a_forbidden_path(tmp_path, monkeypatch):
+    """BASENAME_COLLISION's required_action named `hidden_gold/target.md`
+    verbatim -- leaking the existence and path of a gold file through the one
+    code path that wasn't gated by is_forbidden."""
+    (tmp_path / "hidden_gold").mkdir()
+    (tmp_path / "hidden_gold" / "target.md").write_text("gold", encoding="utf-8")
+    (tmp_path / "target.md").write_text("real", encoding="utf-8")
+    reg = {"t1": VaultEntry(vault_id="t1", root=tmp_path.resolve(),
+                            obsidian_vault_name="T1")}
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda *a, **k: [])
+
+    result = contracts.query_backlinks("t1", "target.md", registry=reg)
+    blob = json.dumps(result, ensure_ascii=False)
+    assert "hidden_gold" not in blob, f"forbidden path leaked: {blob}"
+
+
+def test_drop_reasons_are_not_all_reported_as_vault_mismatch(vault, monkeypatch):
+    """A malformed CLI entry (never reaching the vault-root check) still
+    produced ALL_RESULTS_OUT_OF_SCOPE claiming the Obsidian app's active
+    vault was wrong -- sending the reader after the wrong cause."""
+    monkeypatch.setattr(contracts, "fetch_backlinks",
+                        lambda *a, **k: [{"file": 12345, "count": "1"}])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "ALL_RESULTS_OUT_OF_SCOPE" not in codes, \
+        "nothing failed the vault-root check; must not blame vault scope"
+    assert "ALL_RESULTS_FILTERED" in codes
+    assert result["dropped_out_of_scope"] == 0
+    assert result["dropped_by_reason"]["malformed"] == 1

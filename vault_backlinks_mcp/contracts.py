@@ -31,8 +31,8 @@ from __future__ import annotations
 from registry import RegistryError, VaultEntry, load_registry, resolve_vault
 from obsidian_backend import ObsidianUnavailable, fetch_backlinks
 from security import (PathSecurityError, find_basename_collisions, is_forbidden,
-                      is_symlink_under_root, exists_under_root,
-                      validate_relative_path)
+                      is_forbidden_resolved, is_symlink_under_root,
+                      exists_under_root, validate_relative_path)
 
 CONTRACT_VERSION = "vault-backlinks-result-v1"
 DEFAULT_MAX_RESULTS = 50
@@ -44,6 +44,7 @@ def _error_result(vault_id: str, path: str, message: str, *,
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": path,
         "backend_used": "none", "backlinks": None, "total": 0,
         "dropped_out_of_scope": 0,
+        "dropped_by_reason": {"malformed": 0, "forbidden": 0, "out_of_scope": 0},
         "review_required": bool(review_checks), "review_checks": review_checks or [],
         "error": message,
     }
@@ -72,6 +73,18 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
         vault = resolve_vault(vault_id, reg)
     except RegistryError as exc:
         return _error_result(vault_id, clean_path, str(exc))
+
+    # Re-check against the RESOLVED path now that we have a vault. The
+    # literal check above cannot see through a symlink alias
+    # (`alias/gold.json` where `alias -> hidden_gold`) -- reproduced
+    # 2026-08-09, adversarial review findings #2/#4, where such a path
+    # cleared both the literal check and exists_under_root and reached the
+    # external CLI.
+    if is_forbidden_resolved(vault, clean_path):
+        return _error_result(vault_id, clean_path,
+                             "path resolves inside a forbidden segment "
+                             "(evaluation/gold data is never queried or "
+                             "returned by this tool)")
 
     if not exists_under_root(vault, clean_path):
         return _error_result(
@@ -108,7 +121,14 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
                              review_checks=review_checks or None)
 
     kept: list[dict] = []
-    dropped = 0
+    # Counted per reason, not lumped together. A single `dropped` total made
+    # the review_check below misattribute every drop to a vault mismatch --
+    # reproduced 2026-08-09 (adversarial review findings #1/#6): a malformed
+    # entry, or one correctly rejected by the forbidden-segment filter,
+    # still produced "none of which exist under the registered root ...
+    # the Obsidian app's active vault does not match vault_id", sending the
+    # reader after the wrong cause.
+    drops = {"malformed": 0, "forbidden": 0, "out_of_scope": 0}
     for item in raw:
         # graph_for_candidate()'s own JSON parse falls back to raw text
         # lines (list of str) when the CLI didn't emit valid JSON for this
@@ -117,20 +137,20 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
         if isinstance(item, str):
             item = {"file": item}
         elif not isinstance(item, dict):
-            dropped += 1
+            drops["malformed"] += 1
             continue
         source = item.get("file")
         if not isinstance(source, str):
-            dropped += 1
+            drops["malformed"] += 1
             continue
-        if is_forbidden(source):
-            dropped += 1
+        if is_forbidden(source) or is_forbidden_resolved(vault, source):
+            drops["forbidden"] += 1
             continue
         # The load-bearing check (see obsidian_backend.py's module docstring):
         # `vault=` is not reliably honored, so a CLI answer is only trusted
         # path-by-path, against the vault_id the caller actually asked for.
         if not exists_under_root(vault, source):
-            dropped += 1
+            drops["out_of_scope"] += 1
             continue
         try:
             count = int(item.get("count", 1))
@@ -138,23 +158,45 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
             count = 1
         kept.append({"source_path": source, "link_count": count})
 
-    if dropped and not kept:
+    dropped = sum(drops.values())
+    breakdown = ", ".join(f"{n} {reason}" for reason, n in drops.items() if n)
+
+    if drops["out_of_scope"] and not kept:
         review_checks.append({
             "code": "ALL_RESULTS_OUT_OF_SCOPE",
             "required_action": (
-                f"obsidian CLI returned {dropped} result(s), none of which exist under "
-                f"vault_id {vault_id!r}'s registered root. The CLI's vault= argument is "
-                f"not reliably honored (measured 2026-08-08) -- this likely means the "
-                f"Obsidian app's active vault does not match vault_id. Re-check which "
-                f"vault is open in the Obsidian app before trusting this as 'zero "
-                f"backlinks'."),
+                f"obsidian CLI returned {len(raw)} result(s) and none survived filtering "
+                f"({breakdown}); at least one failed the vault-root check for vault_id "
+                f"{vault_id!r}. The CLI's vault= argument is not reliably honored "
+                f"(measured 2026-08-08) -- this may mean the Obsidian app's active vault "
+                f"does not match vault_id. Re-check which vault is open in the Obsidian "
+                f"app before trusting this as 'zero backlinks'."),
+        })
+    elif drops["out_of_scope"]:
+        review_checks.append({
+            "code": "SOME_RESULTS_OUT_OF_SCOPE",
+            "required_action": (f"{drops['out_of_scope']} of {len(raw)} CLI-returned "
+                                f"result(s) were dropped because they do not exist under "
+                                f"vault_id {vault_id!r}'s registered root."),
+        })
+    elif dropped and not kept:
+        # Everything was dropped, but NOT for the vault-mismatch reason --
+        # say so instead of steering the reader toward the wrong hypothesis.
+        review_checks.append({
+            "code": "ALL_RESULTS_FILTERED",
+            "required_action": (
+                f"obsidian CLI returned {len(raw)} result(s) and none survived filtering "
+                f"({breakdown}). This is not a vault-scope problem: no result failed the "
+                f"vault-root check. 'forbidden' means the filter excluded protected "
+                f"paths (working as intended); 'malformed' means the CLI's output did "
+                f"not parse as expected for those entries."),
         })
     elif dropped:
         review_checks.append({
-            "code": "SOME_RESULTS_OUT_OF_SCOPE",
+            "code": "SOME_RESULTS_FILTERED",
             "required_action": (f"{dropped} of {len(raw)} CLI-returned result(s) were "
-                                f"dropped because they do not exist under vault_id "
-                                f"{vault_id!r}'s registered root."),
+                                f"dropped ({breakdown}). None failed the vault-root "
+                                f"check."),
         })
 
     truncated = len(kept) > max_results
@@ -163,7 +205,12 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
     return {
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": clean_path,
         "backend_used": "live", "backlinks": kept, "total": len(kept),
-        "dropped_out_of_scope": dropped,
+        # `dropped_out_of_scope` now means exactly what it says -- only the
+        # vault-root failures. `dropped_by_reason` carries the full picture
+        # so a caller can tell a security filter doing its job apart from a
+        # wrong-vault answer (findings #1/#6).
+        "dropped_out_of_scope": drops["out_of_scope"],
+        "dropped_by_reason": dict(drops),
         "review_required": bool(review_checks) or truncated,
         "review_checks": review_checks + ([{
             "code": "TRUNCATED",

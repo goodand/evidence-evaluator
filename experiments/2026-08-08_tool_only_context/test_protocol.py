@@ -66,14 +66,70 @@ def test_t1_docstring_is_frozen_and_no_longer_tracks_server_py():
         "to change, that is a new arm, not an edit to this one.")
 
 
-def test_t3_arm_text_matches_the_shipped_docstring_exactly():
-    """The load-bearing check, now pointed at T3 -- the 2026-08-09 candidate
-    fix applied to server.py (OPERATIONS_LOG.md §5 item 2 / §6). If this
-    drifts, the T3 experiment measures a docstring nobody actually ships."""
-    assert _NORMALIZE(_gen_prompts.T3_DOCSTRING) == _NORMALIZE(_shipped_docstring()), (
-        "T3_DOCSTRING in _gen_prompts.py no longer matches server.py's "
-        "registered docstring -- regenerate _prompts_t3.json as an explicit "
-        "amendment, do not silently edit frozen prompts.")
+# T3_DOCSTRING's frozen hash (recorded 2026-08-09, when the adversarial
+# review's C2 finding forced server.py's docstring to change and T3 stopped
+# tracking it). trials_t3.json (296e56a) was measured against this exact
+# text -- see test_t3_docstring_is_frozen below.
+_T3_FROZEN_SHA256 = "8bde800502dde96b7d4f13beef1a23dae085b60d2a8c497fe49cafed1c0dd977"
+
+
+def test_t3_docstring_is_frozen_and_no_longer_tracks_server_py():
+    """Same rule as T1, now applied to T3.
+
+    T3 was the shipped text when trials_t3.json was collected. The 2026-08-09
+    adversarial review then found that this very text instructs agents to read
+    `backlink_count`, a field the tool never returns (finding C2 -- the name
+    was copied from the experiment's own RESPONSE_SCHEMA). Fixing server.py to
+    say `total` means the shipped docstring and T3 have diverged **on
+    purpose**: T3 must stay byte-identical because it is what the scored
+    trials actually measured.
+
+    Consequence recorded honestly rather than papered over: T3's reported
+    improvement (OPERATIONS_LOG §7) was measured against a docstring
+    containing a wrong field name. Whether that invalidates the result is a
+    judgement for the ops-doc, not something to silently fix by editing the
+    frozen prompt.
+    """
+    import hashlib
+    got = hashlib.sha256(_gen_prompts.T3_DOCSTRING.encode("utf-8")).hexdigest()
+    assert got == _T3_FROZEN_SHA256, (
+        "T3_DOCSTRING changed -- this would silently redefine what the "
+        "already-scored T3 trials (296e56a) measured. If the shipped "
+        "docstring needs to change, that is a new arm (T4), not an edit.")
+
+
+def test_shipped_docstring_does_not_reference_a_nonexistent_field():
+    """The load-bearing check, re-pointed at the *property* that C2 violated
+    rather than at any one arm's text.
+
+    C2 (2026-08-09, two reviewers converged independently): server.py's
+    docstring told agents to read `backlink_count`; the tool's actual keys are
+    `backlinks` (list) and `total` (int). Verified at the time by grep (only
+    matched the docstring) and by executing the pipeline. Pinning arm text
+    would not have caught this -- the arm text *was* the shipped text and both
+    were wrong together. This asserts against contracts.py's real output keys
+    instead.
+    """
+    shipped = _shipped_docstring()
+    import re
+    referenced = set(re.findall(r"`(\w+)`", shipped))
+
+    import contracts
+    from registry import VaultEntry
+    import inspect
+    error_src = inspect.getsource(contracts._error_result)
+    real_keys = set(re.findall(r'"(\w+)":', error_src))
+
+    # Field-like names the docstring cites that the result never carries.
+    # Allowlist: values and prose terms, not result keys.
+    allowed_non_keys = {"live", "none", "vault_id", "path", "max_results",
+                        "required_action", "backlink_count_IS_NOT_A_KEY"}
+    cited_fields = {r for r in referenced
+                    if r.islower() and "_" in r or r in {"total", "error", "backlinks"}}
+    bogus = {f for f in cited_fields if f not in real_keys and f not in allowed_non_keys}
+    assert not bogus, (
+        f"server.py's docstring cites field(s) the tool never returns: "
+        f"{sorted(bogus)}. Real keys: {sorted(real_keys)}")
 
 
 def test_every_fixture_has_a_scored_truth_entry():

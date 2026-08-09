@@ -38,14 +38,15 @@ def vault_backlinks(vault_id: str, path: str,
     silently converted to an empty backlink list. Read `review_required` and
     `review_checks` before treating a result as final; a non-empty
     `review_checks` means something needs a human or a follow-up check, not
-    that the call failed. A review check does not by itself mean
-    `backlink_count` is wrong or uncertain -- each check has its own scope
-    (stated in its `required_action`), which may be unrelated to whether the
-    count for this exact path is correct. When `error` is null and
-    `backend_used` is `"live"`, `backlink_count` is a real count from this
-    call; do not downgrade your confidence in it just because
-    `review_checks` is non-empty -- check whether that specific entry's
-    scope actually bears on the count before treating the count as uncertain.
+    that the call failed. A review check does not by itself mean `total`
+    (the backlink count, alongside the `backlinks` list) is wrong or
+    uncertain -- each check has its own scope (stated in its
+    `required_action`), which may be unrelated to whether the count for this
+    exact path is correct. When `error` is null and `backend_used` is
+    `"live"`, `total` is a real count from this call; do not downgrade your
+    confidence in it just because `review_checks` is non-empty -- check
+    whether that specific entry's scope actually bears on the count before
+    treating the count as uncertain.
     """
     return query_backlinks(vault_id, path, max_results=max_results)
 

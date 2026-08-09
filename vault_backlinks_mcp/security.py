@@ -43,8 +43,41 @@ def validate_relative_path(raw: str) -> str:
 
 
 def is_forbidden(path: str, forbidden_segments: tuple[str, ...] = DEFAULT_FORBIDDEN_SEGMENTS) -> bool:
-    parts = set(Path(path).parts)
-    return any(seg in parts for seg in forbidden_segments)
+    """Literal-string check only -- see `is_forbidden_resolved` for the real
+    gate. Kept because callers sometimes have a path with no vault attached
+    (and because a literal match is a cheap early reject), but it is NOT
+    sufficient on its own: it cannot see through a symlink alias, and it is
+    case-sensitive while macOS's default APFS is not.
+
+    Both gaps were reproduced end to end on 2026-08-09 (adversarial review
+    findings #2/#4): `alias/gold.json` where `alias -> hidden_gold` returned
+    False here and True from `exists_under_root`, so the query proceeded.
+    """
+    parts = {p.casefold() for p in Path(path).parts}
+    return any(seg.casefold() in parts for seg in forbidden_segments)
+
+
+def is_forbidden_resolved(vault: VaultEntry, path: str,
+                          forbidden_segments: tuple[str, ...] = DEFAULT_FORBIDDEN_SEGMENTS) -> bool:
+    """The real gate: forbidden if the literal path matches OR if the path,
+    once resolved through symlinks, lands inside a forbidden directory.
+
+    `is_forbidden` alone is bypassable two ways (see its docstring). This
+    resolves first and checks the canonical location, which is what the
+    module docstring's guarantee ("never accepted as a query target, even if
+    the underlying CLI would happily return them") actually requires.
+    """
+    if is_forbidden(path, forbidden_segments):
+        return True
+    try:
+        target = (vault.root / path).resolve()
+        relative = target.relative_to(vault.root.resolve())
+    except (OSError, ValueError):
+        # Cannot resolve or resolves outside the root -- exists_under_root
+        # rejects it separately; treat unresolvable as not-forbidden here so
+        # this function has exactly one job.
+        return False
+    return is_forbidden(str(relative), forbidden_segments)
 
 
 def exists_under_root(vault: VaultEntry, path: str) -> bool:
@@ -86,9 +119,22 @@ def find_basename_collisions(vault: VaultEntry, path: str) -> list[str]:
     target by basename instead of exact path -- the vault-workspace failure
     mode this server exists partly to avoid (same-named files across
     worktrees resolved to the wrong one).
+
+    Forbidden paths are excluded from the result. Without that filter this
+    function leaked them: reproduced 2026-08-09 (adversarial review finding
+    #3) -- a vault containing both `target.md` and `hidden_gold/target.md`
+    produced a BASENAME_COLLISION `required_action` naming
+    `hidden_gold/target.md` verbatim, disclosing the existence and path of a
+    gold file through the one code path that was not gated by `is_forbidden`.
     """
     name = Path(path).name
-    return sorted(
-        str(p.relative_to(vault.root)) for p in vault.root.rglob(name)
-        if str(p.relative_to(vault.root)) != path
-    )
+    out = []
+    for p in vault.root.rglob(name):
+        try:
+            relative = str(p.relative_to(vault.root))
+        except ValueError:
+            continue
+        if relative == path or is_forbidden(relative):
+            continue
+        out.append(relative)
+    return sorted(out)
