@@ -126,3 +126,64 @@ grep -rn backlink_count vault_backlinks_mcp/   →  server.py:42, server.py:45  
    여부 판단 필요. **이미 나온 T3 결과는 낡은 문구로 측정된 것**임을 기록할 것.
 4. **#2, #3 직접 재현** 후 수정.
 5. 전부 통과하면 push.
+
+## 5. 해소 기록 (2026-08-09, 위 4번 항목 순서대로 수행)
+
+§3의 "push 보류" 판정은 **아래 근거로 소멸했다.** 원문을 남기는 이유는 판정이
+어떤 사실 위에 서 있었는지가 사라지면 재판정을 검증할 수 없기 때문이다.
+
+§3의 근거 3개가 각각 어떻게 처리됐는가:
+
+| §3 근거 | 상태 | 처리 |
+|---|---|---|
+| 1. C1 미수정 | **해소** | `evidence-evaluator@00a21ca` |
+| 2. 미검증 blocker #2·#3 (보안) | **해소** | 둘 다 **직접 재현 후** 수정 — `vault-backlinks-mcp@c967a26` |
+| 3. 자동 검증 BLOCKED → 나머지 무해 근거 없음 | **해소** | BLOCKED를 "통과"로 읽지 않고, 17건을 메인 세션이 **전수 직접 판독**했다 |
+
+### 확정된 수정과 그 증명
+
+모든 blocker는 **먼저 재현하고 나서** 고쳤다. 재현 없는 수정은 무엇을 고쳤는지
+증명하지 못한다.
+
+- **C1** — `run_clean_judge()`가 `pins` 없이 무결성 검사를 조용히 건너뜀.
+  수정: 검사를 안 돌린 결과에 `integrity_verified: false`를 **반드시** 표시하고,
+  CLI의 `--verify-self`는 `--pins` 없으면 exit 5로 거부. 회귀 테스트 5건
+  (`tests/test_clean_judge.py`)은 실제 `evaluator.py`를 디스크에서 변조한다.
+
+  **여기서 첫 수정이 버그보다 나빴다.** `pins = pins or source_hashes()`는
+  이미 패치된 파일을 읽으므로 항상 일치한다 — 절대 실패할 수 없는 가드(P1).
+  변조 시나리오를 재실행해서 잡았고, 되돌린 뒤 그 교훈을
+  `test_locally_computed_pins_would_be_vacuous`로 못박았다.
+
+- **#2 (`is_forbidden` 대소문자 무시 안 함)** / **#3 (`find_basename_collisions`가
+  `hidden_gold/` 경로를 유출)** — 둘 다 재현 후 수정. `is_forbidden`은
+  casefold 비교로, 추가로 `is_forbidden_resolved()`가 symlink 해석 후 경로를
+  다시 검사한다. collision 탐색은 결과를 `is_forbidden`으로 거른다.
+
+- **C2** — docstring `backlink_count` → `total`.
+- **#10** — `validate_against_schema`가 미구현 키워드(`oneOf`/`$ref` 등)를
+  **무시하고 통과**시킴. 무시가 아니라 거부로 수정 + 실제 배포 스키마 2개가
+  이 부분집합으로 표현 가능함을 테스트로 고정.
+- **#16** — `.claude/worktrees/`가 untracked·비-gitignore. `.gitignore`에 추가.
+
+### 뮤테이션 검증
+
+이 세션에서 공허한 가드를 실제로 잡아낸 유일한 기제다(5/5 성공). 새 회귀
+테스트마다 대응 가드를 무력화해 테스트가 **실패하는지** 확인했다 — 실패하지
+않는 테스트는 통과해도 아무것도 증명하지 않는다.
+
+### T3 무효화 판정 (위 4번 3항이 남긴 미결)
+
+**`trials_t3.json`은 무효화하지 않는다. 대신 측정 대상 텍스트를 기록으로
+고정한다.** T3는 C2 수정 *이전* docstring(`backlink_count`)에 대해 측정됐고,
+그것이 결함이 아니라 **측정하려던 조건 그 자체**다 — T3는 잘못된 필드명이
+있는 문구가 zero-context 에이전트를 오도하는지를 물었고 D case Z6 →0/5로
+"수정이 작동한다"를 보였다. 수정 후 문구로 다시 돌리면 다른 질문이 된다.
+따라서 T3 결과는 유효하되 **"수정 전 문구에 대한 측정"으로만 인용 가능**하다.
+
+### 현 판정
+
+| 저장소 | 상태 |
+|---|---|
+| `evidence-evaluator` | blocker 0건, 30 tests pass, worktree clean. remote(`goodand/evidence-evaluator`) 존재·비어 있음 → **push 가능, 사용자 승인 대기** |
+| `vault-backlinks-mcp` | blocker 0건. **remote 미설정** → push 이전에 저장소 생성 결정 필요 |
