@@ -227,19 +227,57 @@ def source_hashes() -> dict[str, str]:
 
 def run_clean_judge(payload_path: Path, pins: dict[str, str] | None = None) -> dict:
     """Score in a subprocess that ignores this process's environment, site
-    config, and bytecode cache. See module docstring for why."""
+    config, and bytecode cache. See module docstring for why.
+
+    **`pins` must come from a trusted context** -- a value captured before the
+    code could have been tampered with (committed to version control, recorded
+    by an earlier qualification run). Omitting it does not weaken the check;
+    it *removes* it, and the returned result says so explicitly.
+
+    Until 2026-08-09, `pins=None` meant `--pins` was not passed, so `main()`'s
+    `if args.verify_self and args.pins:` was False and **no hash check ran at
+    all** -- the subprocess scored happily with a patched evaluator and
+    returned a normal-looking result. Reproduced (adversarial review finding
+    C1, two reviewers converged independently): with `evaluate()` replaced by
+    a stub returning `{"full_hard_gate": true, "TAMPERED": true}`,
+    `run_clean_judge(path)` returned that stub's output with exit 0 and no
+    warning, while the same call with correct pins returned
+    `judge_error: judge source drifted`.
+
+    The first attempted fix was `pins = pins or source_hashes()`. **That is
+    worse than the bug and was reverted**: pins read at call time come from
+    the already-patched file, so they always match and the check passes
+    unconditionally -- turning "no check" into "a check that cannot fail",
+    the vacuous-guard pattern. Verified rather than assumed: under that
+    version the tampered-evaluate scenario still returned
+    `{"full_hard_gate": true, "TAMPERED": true}`.
+
+    So: with no trusted pins there is no integrity claim to make, and this
+    function does not manufacture one. It scores, and marks the result
+    `"integrity_verified": false` so no caller can mistake it for verified.
+    """
     with tempfile.TemporaryDirectory() as cache:
         env = {"PATH": os.environ.get("PATH", "")}
         cmd = [sys.executable, "-B", "-E", "-P", "-I", "-X",
                f"pycache_prefix={cache}", str(HERE / "evaluator.py"),
-               "--payload", str(payload_path), "--verify-self"]
+               "--payload", str(payload_path)]
         if pins:
-            cmd += ["--pins", json.dumps(pins)]
+            cmd += ["--verify-self", "--pins", json.dumps(pins)]
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=HERE)
     if proc.returncode != 0:
         return {"judge_error": proc.stderr.strip() or "judge exited nonzero",
                 "returncode": proc.returncode}
-    return json.loads(proc.stdout)
+    result = json.loads(proc.stdout)
+    # Stamp the integrity status onto every result, both ways. A caller must
+    # be able to tell a verified score from an unverified one by looking at
+    # the score -- not by remembering what it passed in.
+    if isinstance(result, dict):
+        result["integrity_verified"] = bool(pins)
+    elif isinstance(result, list):
+        for item in result:
+            if isinstance(item, dict):
+                item["integrity_verified"] = bool(pins)
+    return result
 
 
 def main() -> int:
@@ -264,8 +302,16 @@ def main() -> int:
         print("clean judge requires -X pycache_prefix", file=sys.stderr)
         return 4
 
-    if args.verify_self and args.pins:
+    if args.verify_self:
         # INSIDE the clean process, before scoring anything.
+        # Refuse rather than skip: `--verify-self` without `--pins` used to
+        # fall through silently and score anyway (finding C1, 2026-08-09),
+        # which made the flag's name a lie. A caller that asks to verify and
+        # supplies nothing to verify against gets an error, not a pass.
+        if not args.pins:
+            print("--verify-self requires --pins; refusing to score without "
+                  "the integrity check the flag promises", file=sys.stderr)
+            return 5
         now, pinned = source_hashes(), json.loads(args.pins)
         drift = [k for k, v in pinned.items() if now.get(k) != v]
         if drift:
