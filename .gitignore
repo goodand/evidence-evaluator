@@ -6,3 +6,9 @@ build/
 dist/
 .venv/
 venv/
+
+# EnterWorktree creates nested git worktrees here. They are working copies of
+# this same repo (each with its own diverged evidence_evaluator/ and tests/),
+# not content to track -- committing one would create the exact two-copies
+# failure mode this project's source workspace exists to prevent.
+.claude/worktrees/

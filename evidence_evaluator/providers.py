@@ -173,9 +173,48 @@ def seatbelt_profile_v2(project_root: Path, host_control: Path,
 # --------------------------------------------------------------------------
 # minimal JSON-schema check (neither CLI has a full --output-schema validator)
 # --------------------------------------------------------------------------
+# JSON-schema keywords this validator actually implements. Anything else is
+# refused rather than ignored -- see validate_against_schema's docstring.
+_SUPPORTED_SCHEMA_KEYWORDS = frozenset({
+    "type", "required", "properties", "additionalProperties", "items",
+    "minLength", "minimum", "const", "enum",
+    # Annotations that carry no constraint; safe to ignore.
+    "description", "title", "$schema", "default", "examples",
+})
+
+
 def validate_against_schema(payload: Any, schema: dict, path: str = "$") -> None:
-    """Validate every JSON-schema keyword used by the two response schemas."""
+    """Validate the JSON-schema subset this package implements.
+
+    Deliberately NOT a general JSON-schema validator. It refuses schemas it
+    cannot enforce instead of passing them, because the alternative is a
+    validator that reports success for constraints it never checked --
+    indistinguishable from real validation at the call site.
+
+    Reproduced before this guard existed (adversarial review finding #10,
+    2026-08-09): a node with no `type` key, e.g.
+    `{"oneOf": [{"type": "object", "required": ["answer_text"]}]}`, fell
+    through every branch, so `{"totally": "wrong"}` validated clean. Any
+    provider response shaped by `oneOf`/`anyOf`/`allOf`/`$ref`/`not` was
+    being accepted unchecked.
+
+    If you need those keywords, implement them here or validate with a real
+    JSON-schema library -- do not remove this check.
+    """
+    unsupported = sorted(set(schema) - _SUPPORTED_SCHEMA_KEYWORDS)
+    if unsupported:
+        raise ProviderError(
+            f"{path}: schema uses keyword(s) this validator does not "
+            f"implement: {unsupported}. Refusing rather than reporting a "
+            f"pass it did not verify.")
+
     kind = schema.get("type")
+    if kind is None and not ({"const", "enum"} & set(schema)):
+        raise ProviderError(
+            f"{path}: schema node has no 'type', 'const', or 'enum' -- "
+            f"nothing to validate against, and silently accepting it would "
+            f"mean this call verified nothing.")
+
     if kind == "object":
         if not isinstance(payload, dict):
             raise ProviderError(f"{path}: expected object, got {type(payload).__name__}")
