@@ -24,6 +24,7 @@ class PathSecurityError(ValueError):
 # see `contract.py` in the evidence-evaluator package for the same
 # "explicit list, not a heuristic" choice and why.
 DEFAULT_FORBIDDEN_SEGMENTS = ("hidden_gold", ".git", "node_modules")
+MAX_BASENAME_COLLISIONS = 20
 
 
 def validate_relative_path(raw: str) -> str:
@@ -149,10 +150,23 @@ def find_basename_collisions(vault: VaultEntry, path: str) -> list[str]:
       appeared in the collision list -- the same symlink-alias bypass that
       `is_forbidden_resolved` exists to close, just reached through this
       function instead of the main query path.
+
+    Bounded to `MAX_BASENAME_COLLISIONS` matches. This does not fix the
+    underlying cost (a full `rglob()` still walks the whole vault tree on
+    every call, and a vault with zero or few matches pays that full cost
+    regardless of the cap) -- it only stops early once enough matches are
+    found and prevents an unbounded result list. A real fix would need an
+    index, which the DO-NOT-BUILD ruling in this package's module docstring
+    already rejected for correctness reasons (staleness), not cost reasons;
+    trading correctness for speed here would reopen that same rejected
+    tradeoff. Reproduced 2026-08-10 (independent review round 2, finding #5):
+    no cap existed before this.
     """
     name = Path(path).name
     out = []
     for p in vault.root.rglob(name):
+        if len(out) >= MAX_BASENAME_COLLISIONS:
+            break
         try:
             relative = str(p.relative_to(vault.root))
         except ValueError:

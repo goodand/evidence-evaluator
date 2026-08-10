@@ -47,6 +47,16 @@ def vault_backlinks(vault_id: str, path: str,
     confidence in it just because `review_checks` is non-empty -- check
     whether that specific entry's scope actually bears on the count before
     treating the count as uncertain.
+
+    ONE REVIEW CHECK IS AN EXCEPTION TO THAT LAST RULE:
+    `AMBIGUOUS_ACROSS_REGISTERED_VAULTS` means the queried path exists in
+    more than one of your registered vaults, and this tool has no way to
+    prove which vault the CLI actually answered from -- `total` and
+    `backlinks` may belong entirely to the wrong vault in that case. This is
+    a residual limitation, not a bug: no Obsidian CLI command reports which
+    vault is currently active, so path-existence is the strongest available
+    check. If you see this code, verify the content independently before
+    trusting the count.
     """
     return query_backlinks(vault_id, path, max_results=max_results)
 

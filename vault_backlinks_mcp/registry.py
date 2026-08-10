@@ -75,6 +75,16 @@ def load_registry(path: Path | None = None) -> dict[str, VaultEntry]:
             raise RegistryError(
                 f"vault registry entry {vault_id!r} needs both 'root' and "
                 f"'obsidian_vault_name'")
+        # `Path(root)` raises a raw TypeError (not RegistryError) for a
+        # non-string root such as a list -- reproduced 2026-08-10
+        # (independent review round 2, finding #1). Validate the type here,
+        # at the schema boundary, rather than letting a lower-level
+        # constructor's exception type leak through.
+        if not isinstance(root, str) or not isinstance(name, str):
+            raise RegistryError(
+                f"vault registry entry {vault_id!r} must have string 'root' "
+                f"and 'obsidian_vault_name', got {type(root).__name__} and "
+                f"{type(name).__name__}")
         root_path = Path(root)
         if not root_path.is_dir():
             raise RegistryError(

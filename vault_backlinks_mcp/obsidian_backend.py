@@ -159,3 +159,44 @@ def fetch_backlinks(vault_root: Path, obsidian_vault_name: str, path: str, *,
         raise ObsidianUnavailable(
             f"obsidian CLI backlinks output was not a list for {path!r}: {backlinks!r}")
     return backlinks
+
+
+def confirm_active_vault(vault_root: Path, *, run_fn=None) -> str:
+    """Best-effort cross-check: does `obsidian vault info=path`, called with
+    the SAME cwd as `fetch_backlinks`, agree that `vault_root` is the vault
+    being answered from?
+
+    Contributed by the .vault-harness reuse-contract review session
+    (2026-08-10) in response to finding #3 ("no way to confirm which vault
+    is active"): `obsidian vault info=path` was tested there and confirmed
+    to follow `cwd` the same way `backlinks` does -- it is NOT an
+    independent oracle for "which vault has GUI focus", since both commands
+    resolve through the identical cwd-based mechanism. What it DOES give is
+    a second, independently-implemented CLI subcommand that must agree with
+    `fetch_backlinks`'s own cwd resolution; if the two ever diverge, that is
+    a real signal something is wrong, even though agreement is not proof.
+
+    Returns "confirmed" (paths match), "mismatch" (CLI answered with a
+    different path -- do not trust the backlinks call), or "unknown" (CLI
+    unavailable or errored -- never guessed as "confirmed", per the review
+    session's explicit guidance not to assume active-vault status on
+    failure).
+    """
+    runner = run_fn or _run
+    if runner is None or _OBSIDIAN is None:
+        return "unknown"
+    try:
+        result = runner([_OBSIDIAN, "vault", "info=path"], cwd=vault_root)
+    except Exception:
+        return "unknown"
+    output = result.stdout.strip()
+    if result.returncode != 0 or not output or "unable to find Obsidian" in output:
+        return "unknown"
+    try:
+        reported = Path(output).resolve()
+    except (OSError, ValueError):
+        return "unknown"
+    try:
+        return "confirmed" if reported == vault_root.resolve() else "mismatch"
+    except OSError:
+        return "unknown"

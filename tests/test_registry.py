@@ -61,3 +61,27 @@ def test_well_formed_entry_still_loads(tmp_path):
     })
     registry = load_registry(path)
     assert registry["t"].obsidian_vault_name == "T"
+
+
+# --- regression from the 2026-08-10 independent review round 2, finding #1
+# (second half): non-string root/name types must be a RegistryError, not a
+# raw TypeError from Path(root) --------------------------------------------
+
+def test_non_string_root_is_a_registry_error_not_type_error(tmp_path):
+    path = _write(tmp_path / "registry.json", {
+        "contract_version": "vault-registry-v1",
+        "vaults": {"t": {"root": ["a", "b"], "obsidian_vault_name": "T"}},
+    })
+    with pytest.raises(RegistryError, match="must have string"):
+        load_registry(path)
+
+
+def test_non_string_obsidian_vault_name_is_a_registry_error(tmp_path):
+    vault_dir = tmp_path / "v"
+    vault_dir.mkdir()
+    path = _write(tmp_path / "registry.json", {
+        "contract_version": "vault-registry-v1",
+        "vaults": {"t": {"root": str(vault_dir), "obsidian_vault_name": 123}},
+    })
+    with pytest.raises(RegistryError, match="must have string"):
+        load_registry(path)

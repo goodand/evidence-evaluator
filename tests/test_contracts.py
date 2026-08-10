@@ -260,3 +260,70 @@ def test_drop_reasons_are_not_all_reported_as_vault_mismatch(vault, monkeypatch)
     assert "ALL_RESULTS_FILTERED" in codes
     assert result["dropped_out_of_scope"] == 0
     assert result["dropped_by_reason"]["malformed"] == 1
+
+
+# --- regressions from the 2026-08-10 independent review round 2 -----------
+
+def test_malformed_registry_is_a_structured_error_not_an_escaped_exception(tmp_path, monkeypatch):
+    """Finding #1: `load_registry()` used to be called OUTSIDE the
+    try/except RegistryError block, so a malformed registry file crashed
+    query_backlinks() itself with an uncaught RegistryError instead of the
+    structured backend_used="none" result every other failure mode gets."""
+    import json
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps({
+        "contract_version": "vault-registry-v1",
+        "vaults": {"bad": "not-an-object"},
+    }), encoding="utf-8")
+    monkeypatch.setenv("VAULT_BACKLINKS_REGISTRY", str(registry_path))
+    result = contracts.query_backlinks("bad", "target.md")  # registry=None -> load_registry()
+    assert result["error"] is not None
+    assert result["backend_used"] == "none"
+
+
+def test_contract_version_is_v2_after_the_total_semantics_change(vault):
+    """Finding #2: `total`'s meaning changed (pre- vs post-truncation) in
+    the previous fix round without bumping CONTRACT_VERSION -- a breaking,
+    undetectable-by-version change for any pinned consumer."""
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["contract_version"] == "vault-backlinks-result-v2"
+    assert result["contract_version"] != "vault-backlinks-result-v1"
+
+
+def test_path_ambiguous_across_registered_vaults_is_flagged(tmp_path, monkeypatch):
+    """Finding #3 (fundamental limitation, not fully closable): if the
+    queried path also exists under another registered vault, this tool
+    cannot prove which vault the CLI actually answered from. It must not
+    stay silent about that specific, checkable condition."""
+    vault_a_root = tmp_path / "vault_a"
+    vault_b_root = tmp_path / "vault_b"
+    vault_a_root.mkdir()
+    vault_b_root.mkdir()
+    (vault_a_root / "target.md").write_text("a", encoding="utf-8")
+    (vault_b_root / "target.md").write_text("b", encoding="utf-8")
+    registry = {
+        "a": VaultEntry(vault_id="a", root=vault_a_root, obsidian_vault_name="A"),
+        "b": VaultEntry(vault_id="b", root=vault_b_root, obsidian_vault_name="B"),
+    }
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: [])
+    result = contracts.query_backlinks("a", "target.md", registry=registry)
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "AMBIGUOUS_ACROSS_REGISTERED_VAULTS" in codes
+
+
+def test_active_vault_mismatch_downgrades_confidence_explicitly(vault, monkeypatch):
+    monkeypatch.setattr(contracts, "confirm_active_vault", lambda vault_root: "mismatch")
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: [])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "ACTIVE_VAULT_MISMATCH" in codes
+
+
+def test_active_vault_unknown_is_reported_not_assumed_confirmed(vault, monkeypatch):
+    """The review session's explicit guidance: on CLI failure, report
+    'unknown', never guess 'confirmed'."""
+    monkeypatch.setattr(contracts, "confirm_active_vault", lambda vault_root: "unknown")
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: [])
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    codes = [c["code"] for c in result["review_checks"]]
+    assert "ACTIVE_VAULT_UNKNOWN" in codes

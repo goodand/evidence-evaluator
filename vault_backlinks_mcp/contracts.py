@@ -29,13 +29,20 @@ does not apply here.
 from __future__ import annotations
 
 from registry import RegistryError, VaultEntry, load_registry, resolve_vault
-from obsidian_backend import ObsidianUnavailable, fetch_backlinks
+from obsidian_backend import ObsidianUnavailable, confirm_active_vault, fetch_backlinks
 from security import (DEFAULT_FORBIDDEN_SEGMENTS, PathSecurityError,
                       find_basename_collisions, is_forbidden,
                       is_forbidden_resolved, is_symlink_under_root,
                       exists_under_root, validate_relative_path)
 
-CONTRACT_VERSION = "vault-backlinks-result-v1"
+# v2 (2026-08-10): `total`'s meaning changed from "length of the returned
+# (possibly truncated) list" to "real count before truncation", and a new
+# `returned_count` field was added -- a breaking change for any consumer
+# that assumed total == len(backlinks). Reproduced 2026-08-10 (independent
+# review round 2, finding #2): the v1 semantic bug (total computed after
+# truncation) was fixed without bumping the version, so a caller pinned to
+# v1 could not detect that `total` now means something different.
+CONTRACT_VERSION = "vault-backlinks-result-v2"
 DEFAULT_MAX_RESULTS = 50
 MAX_RESULTS_UPPER_BOUND = 1000
 
@@ -82,8 +89,16 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
                              f"({', '.join(DEFAULT_FORBIDDEN_SEGMENTS)} are never queried "
                              f"or returned by this tool)")
 
-    reg = registry if registry is not None else load_registry()
+    # `load_registry()` itself can raise RegistryError (malformed registry
+    # file), not just `resolve_vault()` (unknown vault_id in an otherwise
+    # valid registry). It used to be called outside this try block, so a
+    # malformed registry escaped as an uncaught exception at the MCP
+    # boundary instead of the structured `backend_used: "none"` result every
+    # other failure mode gets. Reproduced 2026-08-10 (independent review
+    # round 2, finding #1): a registry with a non-object vault entry crashed
+    # query_backlinks() itself, not just load_registry().
     try:
+        reg = registry if registry is not None else load_registry()
         vault = resolve_vault(vault_id, reg)
     except RegistryError as exc:
         return _error_result(vault_id, clean_path, str(exc))
@@ -108,6 +123,32 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
             f"cannot confirm belongs to that vault")
 
     review_checks = []
+    # FUNDAMENTAL LIMITATION (independent review round 2, finding #3, not
+    # fully closable): `exists_under_root` only proves the queried path
+    # exists somewhere under vault_id's own filesystem root -- it cannot
+    # prove Obsidian actually answered FROM this vault rather than another
+    # one with an overlapping relative-path layout (e.g. two vaults that
+    # both have `notes/a.md` with different content). No Obsidian CLI
+    # command exposes "which vault is currently active" (checked 2026-08-10:
+    # `obsidian vaults verbose` lists all registered vaults with no active
+    # marker), so there is no available identity check beyond path
+    # existence. This does not detect a wrong-vault answer -- it only
+    # refuses to stay silent about the specific condition (the queried path
+    # existing in more than one registered vault) where that failure mode
+    # cannot be ruled out.
+    same_path_elsewhere = sorted(
+        other_id for other_id, other_vault in reg.items()
+        if other_id != vault_id and exists_under_root(other_vault, clean_path))
+    if same_path_elsewhere:
+        review_checks.append({
+            "code": "AMBIGUOUS_ACROSS_REGISTERED_VAULTS",
+            "required_action": (
+                f"{clean_path!r} also exists under registered vault(s) "
+                f"{same_path_elsewhere}. This tool cannot prove the CLI answered "
+                f"from vault_id {vault_id!r} specifically rather than one of "
+                f"these -- confirm independently (e.g. by content) before "
+                f"trusting this result as authoritative for {vault_id!r}."),
+        })
     if is_symlink_under_root(vault, clean_path):
         review_checks.append({
             "code": "SYMLINK_TARGET",
@@ -126,6 +167,32 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
             "required_action": (f"{len(collisions)} other file(s) under this vault share "
                                 f"the basename {clean_path.split('/')[-1]!r}: {collisions}. "
                                 f"Confirm any consumer resolves by exact path, not basename."),
+        })
+
+    # Best-effort cross-check for the AMBIGUOUS_ACROSS_REGISTERED_VAULTS
+    # limitation above: a second, independent CLI subcommand called with the
+    # same cwd. Not proof (both share the same cwd-resolution mechanism),
+    # but a real disagreement between them is a strong signal, and honest
+    # "unknown" is reported rather than assumed "confirmed" on any failure.
+    active_vault_status = confirm_active_vault(vault.root)
+    if active_vault_status == "mismatch":
+        review_checks.append({
+            "code": "ACTIVE_VAULT_MISMATCH",
+            "required_action": (
+                f"'obsidian vault info=path' (same cwd as the backlinks call) "
+                f"reported a DIFFERENT vault than vault_id {vault_id!r}'s "
+                f"registered root. Do not trust `total`/`backlinks` from this "
+                f"call -- it likely answered from the wrong vault."),
+        })
+    elif active_vault_status == "unknown":
+        review_checks.append({
+            "code": "ACTIVE_VAULT_UNKNOWN",
+            "required_action": (
+                "Could not independently confirm which vault the Obsidian CLI "
+                "is answering from ('obsidian vault info=path' failed or is "
+                "unavailable). This is not a fetch failure by itself, but the "
+                "AMBIGUOUS_ACROSS_REGISTERED_VAULTS risk above cannot be ruled "
+                "out for this call."),
         })
 
     try:

@@ -149,3 +149,32 @@ today; no smoke test for it exists yet.
   not "reliably force-switch to any registered vault on demand".
 - Does not register itself in any Claude Code / Codex global MCP config.
 - Does not touch `.vault-harness/` — read/import only.
+- **Cannot prove a live answer came from the requested vault, only that it's
+  plausible.** `exists_under_root` and the `AMBIGUOUS_ACROSS_REGISTERED_VAULTS`
+  /`ACTIVE_VAULT_MISMATCH`/`ACTIVE_VAULT_UNKNOWN` review checks (added
+  2026-08-10, independent review round 2 finding #3) narrow this but do not
+  close it: if two registered vaults share the same relative path, and the
+  CLI answers from the wrong one, path-existence alone cannot detect that.
+  No Obsidian CLI command reports which vault currently has GUI focus
+  (checked 2026-08-10: `obsidian vaults verbose` lists registered vaults with
+  no active marker; `obsidian vault info=path` follows `cwd` the same way
+  `backlinks` does, so it isn't an independent oracle either — it can only
+  catch the two commands disagreeing with each other, not confirm either is
+  right).
+- **Portability is "override the path", not "verified on a second machine".**
+  `VAULT_HARNESS_DIR` (2026-08-09 fix) lets a caller point at a different
+  harness checkout, but no test actually imports `run`/`parse_cli_output`/
+  `OBSIDIAN` from an alternate harness fixture and performs a real query
+  through it — only that the env var changes which path gets printed. If you
+  deploy this against a harness that isn't this workspace's `.vault-harness/`,
+  you are the first real test of that path.
+- **The "reuse, don't copy" contract with `.vault-harness/` is thinner than
+  it was.** The single-CLI-call fix (2026-08-09) stopped calling the shared
+  `graph_for_candidate()` and now builds its own `backlinks` command,
+  reusing only the harness's lower-level `run()`/`parse_cli_output()`/
+  `OBSIDIAN` primitives plus a hand-copied retry-once policy. A future
+  change to the harness's retry or parsing behavior will not automatically
+  propagate here anymore. The ideal fix — the harness exposing its own
+  single-purpose `fetch_backlinks_only()` — requires editing
+  `.vault-harness/`, which is a protected dirty worktree this package may
+  only read/import, not modify.

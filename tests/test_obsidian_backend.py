@@ -10,7 +10,8 @@ sys.path.insert(0, str(PKG))
 
 import pytest  # noqa: E402
 
-from obsidian_backend import ObsidianUnavailable, fetch_backlinks  # noqa: E402
+from obsidian_backend import (ObsidianUnavailable, confirm_active_vault,  # noqa: E402
+                              fetch_backlinks)
 
 
 # --- regressions from the 2026-08-09 independent review of the
@@ -82,3 +83,37 @@ def test_vault_harness_dir_env_var_overrides_the_hardcoded_default(tmp_path):
          "import obsidian_backend; print(obsidian_backend._HARNESS_DIR)"],
         cwd=str(PKG.parent), env=env, capture_output=True, text=True)
     assert proc.stdout.strip() == str(tmp_path / "somewhere-else")
+
+
+# --- confirm_active_vault (added 2026-08-10 in response to independent
+# review round 2, finding #3): a second, independent CLI subcommand cross-
+# check, contributed by the .vault-harness reuse-contract review session
+# after confirming `obsidian vault info=path` follows `cwd` the same way
+# `backlinks` does (i.e. not a true GUI-focus oracle, but still a real
+# disagreement-detector). Its own explicit guidance: never guess "confirmed"
+# on CLI failure.
+
+def test_confirm_active_vault_matches_reports_confirmed(tmp_path):
+    def fake_run(command, cwd, timeout=15):
+        return subprocess.CompletedProcess(command, 0, str(tmp_path), "")
+    assert confirm_active_vault(tmp_path, run_fn=fake_run) == "confirmed"
+
+
+def test_confirm_active_vault_mismatch_reports_mismatch(tmp_path):
+    other = tmp_path / "other"
+    other.mkdir()
+    def fake_run(command, cwd, timeout=15):
+        return subprocess.CompletedProcess(command, 0, str(other), "")
+    assert confirm_active_vault(tmp_path, run_fn=fake_run) == "mismatch"
+
+
+def test_confirm_active_vault_cli_failure_reports_unknown_not_confirmed(tmp_path):
+    def fake_run(command, cwd, timeout=15):
+        return subprocess.CompletedProcess(command, 1, "", "The CLI is unable to find Obsidian")
+    assert confirm_active_vault(tmp_path, run_fn=fake_run) == "unknown"
+
+
+def test_confirm_active_vault_runner_exception_reports_unknown(tmp_path):
+    def raising_run(command, cwd, timeout=15):
+        raise OSError("no such file or directory: obsidian")
+    assert confirm_active_vault(tmp_path, run_fn=raising_run) == "unknown"

@@ -155,3 +155,18 @@ def test_find_basename_collisions_excludes_a_symlink_alias_into_forbidden(tmp_pa
 
     assert is_forbidden("docs/target.md") is False, "literal check cannot see it"
     assert find_basename_collisions(v, "target.md") == []
+
+
+def test_find_basename_collisions_is_capped(tmp_path):
+    """Finding #5 (independent review round 2, 2026-08-10): no cap existed
+    before this -- a vault with many same-named files returned an unbounded
+    list."""
+    from security import MAX_BASENAME_COLLISIONS
+    (tmp_path / "target.md").write_text("root", encoding="utf-8")
+    for i in range(MAX_BASENAME_COLLISIONS + 10):
+        d = tmp_path / f"dup{i}"
+        d.mkdir()
+        (d / "target.md").write_text(str(i), encoding="utf-8")
+    v = VaultEntry(vault_id="t", root=tmp_path.resolve(), obsidian_vault_name="T")
+
+    assert len(find_basename_collisions(v, "target.md")) == MAX_BASENAME_COLLISIONS
