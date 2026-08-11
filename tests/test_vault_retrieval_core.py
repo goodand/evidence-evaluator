@@ -395,3 +395,96 @@ def test_vault_corpus_matches_runner_subagent_interface(profile: VaultProfile) -
     assert result["candidate_paths"][0] == "HANDOFF.md"
     assert "bridge.md" in result["candidate_paths"]
     assert result["uncertainty"].startswith("candidates only")
+
+
+# ------------------------------------------------------------- v0.1 gaps ----
+# Audited 2026-08-12 against the v0.1 tool contract (docs/PLAN_V01_AUDIT_AND_GAPS.md).
+# Two things blocked v0.1: `vault_backlinks` was not exposed (the CAPABILITY was
+# already there, used inside the graph walk), and `fallback_used` was absent from
+# every response even though the error-tolerance contract requires it.
+
+def _svc(tmp_path, **profile_kw):
+    from evidence_evaluator.retrieval.profile import VaultProfile
+    from evidence_evaluator.retrieval.service import RetrievalService
+    return RetrievalService.from_profile(
+        VaultProfile(root=str(tmp_path), vault_name="t", **profile_kw))
+
+
+def _vault(tmp_path):
+    (tmp_path / "hub.md").write_text(
+        "# Hub\nSee [[target]] and [[other]].\n", encoding="utf-8")
+    (tmp_path / "second.md").write_text("# Second\n[[target]]\n", encoding="utf-8")
+    (tmp_path / "target.md").write_text("# Target\nthe answer\n", encoding="utf-8")
+    (tmp_path / "other.md").write_text("# Other\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_backlinks_returns_the_documents_that_link_here(tmp_path):
+    """B1. The graph walk already computed backlinks internally; an agent could
+    not ASK for them. This is the third v0.1 tool."""
+    svc = _svc(_vault(tmp_path))
+    out = svc.backlinks("target.md", limit=10)
+    assert out["status"] in ("ok", "partial")
+    assert sorted(out["backlinks"]) == ["hub.md", "second.md"]
+    assert out["path"] == "target.md"
+    assert "fallback_used" in out
+
+
+@pytest.mark.parametrize("bad,why", [
+    ("../outside.md", "vault 밖"),
+    ("hidden_gold/gold.json", "private"),
+    ("notes.txt", "non-Markdown"),
+])
+def test_backlinks_refuses_what_read_refuses(tmp_path, bad, why):
+    """B2/B3/B5. The same boundary as `read`, not a second one -- a second copy
+    of a security check is a copy that can drift."""
+    svc = _svc(_vault(tmp_path))
+    with pytest.raises(Exception) as exc:
+        svc.backlinks(bad, limit=5)
+    assert exc.type.__name__ in ("ServiceError", "ProfileError", "ValueError"), why
+
+
+def test_backlinks_refuses_a_symlink_escape(tmp_path):
+    """B4. A link pointing outside must not become a readable path."""
+    outside = tmp_path.parent / "escape_target.md"
+    outside.write_text("# Escaped\n", encoding="utf-8")
+    vault = _vault(tmp_path)
+    (vault / "escape.md").symlink_to(outside)
+    svc = _svc(vault)
+    with pytest.raises(Exception):
+        svc.backlinks("escape.md", limit=5)
+
+
+def test_backlinks_respects_limit(tmp_path):
+    """B6. An unbounded list is what the output_k invariant exists to prevent;
+    the same rule has to hold on this tool."""
+    svc = _svc(_vault(tmp_path))
+    out = svc.backlinks("target.md", limit=1)
+    assert len(out["backlinks"]) == 1
+    assert out["truncated"] is True
+
+
+def test_backlinks_falls_back_to_the_filesystem_when_the_cli_is_gone(tmp_path):
+    """B7. The whole error-tolerance policy in one test: the CLI is absent, the
+    call still returns evidence, and it SAYS the fallback was used."""
+    svc = _svc(_vault(tmp_path), obsidian_binary="/nonexistent/obsidian")
+    out = svc.backlinks("target.md", limit=10)
+    assert sorted(out["backlinks"]) == ["hub.md", "second.md"]
+    assert out["fallback_used"] == "filesystem"
+    assert out["status"] == "partial"
+    assert out["warnings"], "a degraded run must say so"
+
+
+def test_every_search_response_declares_whether_a_fallback_was_used(tmp_path):
+    """F1. The contract lists `fallback_used`; it was in no response."""
+    out = _svc(_vault(tmp_path)).search("answer", output_k=4, candidate_pool_k=20)
+    assert "fallback_used" in out
+
+
+def test_search_names_the_filesystem_fallback_when_the_cli_is_gone(tmp_path):
+    """F2. Absent means "no fallback was needed", so it must not be absent when
+    one WAS used -- otherwise the field cannot distinguish the two."""
+    svc = _svc(_vault(tmp_path), obsidian_binary="/nonexistent/obsidian")
+    out = svc.search("answer", output_k=4, candidate_pool_k=20)
+    assert out["fallback_used"] == "filesystem"
+    assert out["review_required"] is True

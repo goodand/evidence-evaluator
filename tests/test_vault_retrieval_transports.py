@@ -109,7 +109,10 @@ async def _mcp_smoke(vault: Path) -> None:
             await session.initialize()
             listed = await session.list_tools()
             tools = {tool.name: tool for tool in listed.tools}
-            assert set(tools) == {"vault_search", "vault_read"}
+            # v0.1 (2026-08-12) added the third tool. `vault_backlinks` exposes
+            # the graph the walk already used internally; see
+            # docs/PLAN_V01_AUDIT_AND_GAPS.md and tests/test_v01_tool_contract.py.
+            assert set(tools) == {"vault_search", "vault_read", "vault_backlinks"}
             assert tools["vault_search"].annotations.readOnlyHint is True
             assert tools["vault_search"].annotations.openWorldHint is False
             assert tools["vault_search"].inputSchema["properties"]["output_k"][

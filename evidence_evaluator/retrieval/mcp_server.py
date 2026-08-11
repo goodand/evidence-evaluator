@@ -91,6 +91,27 @@ def create_mcp(service: RetrievalService) -> FastMCP:
         except (OSError, ServiceError, ValueError) as exc:
             raise ToolError(f"Vault read failed: {exc}") from exc
 
+    @mcp.tool(
+        name="vault_backlinks",
+        description=(
+            "Which vault documents link to this path. Uses the Obsidian CLI when "
+            "it answers and the filesystem graph when it does not -- a CLI "
+            "failure degrades the answer and says so (`fallback_used`), it does "
+            "not disable the tool. Zero backlinks with review_required=true is "
+            "not evidence that none exist."
+        ),
+        annotations=READ_ONLY,
+        structured_output=True,
+    )
+    async def vault_backlinks(
+        path: str = Field(min_length=1, max_length=4096),
+        limit: int = Field(default=20, ge=1, le=200),
+    ) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(service.backlinks, path, limit=limit)
+        except (OSError, ServiceError, ValueError) as exc:
+            raise ToolError(f"Vault backlinks failed: {exc}") from exc
+
     @mcp.resource(
         "vault://retrieval/policy",
         name="Vault retrieval policy",
