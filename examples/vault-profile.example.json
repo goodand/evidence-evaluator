@@ -1,0 +1,24 @@
+{
+  "root": "../your-vault",
+  "vault_name": "your-vault",
+  "obsidian_binary": "/usr/local/bin/obsidian",
+  "obsidian_enabled": true,
+  "authority_prefixes": [
+    "knowledge/files",
+    "docs"
+  ],
+  "aliases": {
+    "handoff": [
+      "handover",
+      "session continuation"
+    ],
+    "backlink": [
+      "incoming link",
+      "wiki link"
+    ]
+  },
+  "excluded_globs": [
+    "archive/private/**"
+  ]
+}
+

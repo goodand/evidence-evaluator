@@ -9,7 +9,12 @@ dependencies = []
 
 [project.optional-dependencies]
 codex-mcp = ["fastmcp"]
+obsidian-mcp = ["mcp>=1.28", "pydantic>=2"]
 dev = ["pytest"]
+
+[project.scripts]
+evidence-vault = "evidence_evaluator.retrieval.cli:main"
+evidence-vault-mcp = "evidence_evaluator.retrieval.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=68"]

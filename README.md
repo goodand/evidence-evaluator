@@ -37,6 +37,74 @@ now, given *this* repo's frozen-surface pins) — not a generic evaluator
 concept. Don't expect to find it here; wire your own gating around the
 engine below if you need it.
 
+## Obsidian vault retrieval
+
+`evidence_evaluator.retrieval` is the reusable, read-only retrieval layer for
+an Obsidian Markdown vault. It is deliberately separate from the evaluator
+engine above:
+
+- It searches and reads only Markdown under a caller-owned `VaultProfile`.
+- It combines exact terms, local BM25, Markdown/wiki-link graph edges, and
+  optional Obsidian CLI links/backlinks using a recall-first policy.
+- It canonicalizes symlink aliases before graph expansion, returns only
+  canonical paths, and blocks private evaluation and VCS paths at one shared
+  policy boundary.
+- It never writes a vault, rebuilds an Obsidian index, reads a gold set, or
+  decides that no evidence exists. A budget stop and zero hits remain
+  `review_required`.
+
+The design and migration evidence are recorded in
+[`docs/DESIGN_OBSIDIAN_RETRIEVAL_CANONICAL.md`](docs/DESIGN_OBSIDIAN_RETRIEVAL_CANONICAL.md)
+and
+[`docs/MIGRATION_STATUS_OBSIDIAN_RETRIEVAL.md`](docs/MIGRATION_STATUS_OBSIDIAN_RETRIEVAL.md).
+
+### CLI
+
+Create a profile from
+[`examples/vault-profile.example.json`](examples/vault-profile.example.json),
+then run either the installed script or the module directly:
+
+```bash
+evidence-vault --profile /absolute/path/vault-profile.json search "handoff state"
+evidence-vault --profile /absolute/path/vault-profile.json read docs/HANDOFF.md \
+  --line-start 1 --line-count 120
+
+# No install is required when running from a checkout.
+python3 -m evidence_evaluator.retrieval.cli --root /absolute/path/to/vault \
+  --vault-name "My Vault" search "handoff state"
+```
+
+The optional MCP transport is the same service, not a second search
+implementation:
+
+```bash
+EVIDENCE_VAULT_PROFILE=/absolute/path/vault-profile.json evidence-vault-mcp
+```
+
+Install it with `pip install 'evidence-evaluator[obsidian-mcp]'` when the
+`mcp` dependency is not already present. It exposes read-only `vault_search`
+and `vault_read`; callers must search, inspect the returned authority and
+warnings, then read selected canonical files.
+
+### Obsidian CLI and permission lanes
+
+The filesystem graph is always available. Obsidian CLI graph expansion is
+additive: it runs each command with `cwd` set to the profile root and falls
+back with an explicit warning when the local CLI cannot answer. This matters
+for agent sandboxes: a host terminal can reach the Obsidian IPC endpoint while
+a managed subprocess with the same command may not. Validate the intended
+runtime, rather than assuming host success transfers to an MCP process:
+
+```bash
+cd /absolute/path/to/vault
+obsidian backlinks vault="My Vault" path=docs/HANDOFF.md counts format=json
+```
+
+If that command fails in the MCP runtime, use the returned filesystem results
+and warning, or grant that runtime only the local IPC capability required by
+Obsidian. Do not disable the path policy or pass a symlink alias to make a
+CLI error disappear.
+
 ## What was intentionally dropped or changed
 
 - **The four fixed arms** (`S_STATIC`/`R_STATIC`/`S_DYNAMIC`/`R_DYNAMIC`) and
@@ -173,8 +241,8 @@ install evidence-evaluator[codex-mcp]`.
 python3 -m pytest tests/ -q
 ```
 
-21 tests, no network, no model calls, no external files beyond a `tmp_path`
-fixture corpus built inline:
+52 collected tests, no network, no model calls, no external files beyond a
+`tmp_path` fixture corpus built inline:
 
 - `test_pipeline.py` (5) — end-to-end: build a corpus, run a scripted
   controller, score the trace.
@@ -184,3 +252,6 @@ fixture corpus built inline:
 - `test_clean_judge.py` (5) — tampers with `evaluator.py` on disk and asserts
   on real subprocess behavior. Slower by design: the subprocess boundary *is*
   the thing under test, so mocking it would test nothing.
+- `test_vault_retrieval_core.py` and `test_vault_retrieval_transports.py` —
+  profile policy, canonical identity, graph traversal, Obsidian-output
+  validation, CLI/MCP parity, and read-only transport behavior.
