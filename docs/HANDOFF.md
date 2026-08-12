@@ -1,0 +1,234 @@
+# HANDOFF — Obsidian retrieval MCP v0.1
+
+이 문서 하나로 재개할 수 있게 쓴다. 이전 대화를 모른다고 가정한다.
+갱신 2026-08-12.
+
+## 1. 지금 상태 한 줄
+
+**세 도구는 동작하고, v0.1 완료 조건 3번이 실패했다** — 실제 Vault 5문항 중
+**2건만 회수**(조건은 4건). 아키텍처를 다시 설계하지 마라. 실패 query 하나를
+fixture로 만들고 최소 수정하는 것이 다음이다.
+
+**추측하지 말고 물어라. 읽기 전용 두 명령이 상태를 말한다:**
+
+```bash
+cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
+python3 -m pytest tests/ -q                        # 73 passed 여야 한다
+python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
+```
+
+기대값(2026-08-12 종료 시점, **host lane**):
+
+```
+tests/            73 passed
+v0.1 계약         12 passed  (stdio MCP 서버 프로세스에서 검증)
+실제 Vault E2E    2/5 회수   ← 조건 미달. docs/E2E_REAL_VAULT_2026-08-12.md
+```
+
+**"host lane"이 붙은 이유**: 이 수치는 Obsidian CLI와 subprocess 실행이 허용된
+환경의 값이다. 권한이 다른 관리형 sandbox에서는 달라질 수 있고, 그것은 회귀가
+아니라 **BLOCKED**다.
+
+## 2. 이 저장소가 무엇인가
+
+**무맥락 agent가 Markdown 코퍼스에서 필요한 문서를 찾아낼 수 있는가**를 실험하기
+위한 검색 도구다. 평가 플랫폼이 아니다.
+
+v0.1의 범위는 **MCP 도구 세 개**뿐이다:
+
+| 도구 | 하는 일 |
+|---|---|
+| `vault_search` | recall-first 검색. lexical seed → graph 확장 → 재순위 |
+| `vault_read` | canonical Markdown 경로의 **범위 제한** 읽기 |
+| `vault_backlinks` | 이 문서로 들어오는 링크. CLI가 답하면 live, 아니면 filesystem |
+
+**범위 밖(확장하지 마라)**: qualification, safety audit, ledger, reviewer
+isolation, release attestation, GraphRAG, neural reranker.
+
+## 3. git 상태
+
+```
+repo    /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
+worktree .claude/worktrees/mcp-v01-backlinks   ← 이 작업 위치
+branch  worktree-mcp-v01-backlinks
+
+7482549  docs — 실제 Vault E2E 5건, 2/5 회수, 조건 3 FAIL
+d93929c  feat — vault_backlinks 도구 + fallback_used 계약 필드
+745323c  (다른 agent) Add canonical Obsidian retrieval service   ← main의 끝
+```
+
+**`origin`은 비어 있다.** 이 저장소는 **한 번도 push된 적이 없다**(원격에 브랜치
+0개). push는 사용자 승인 사항이다.
+
+## 4. 절대 하면 안 되는 것
+
+- **`.vault-harness/`와 active experiment artifact를 수정·이동·삭제·이름변경하지
+  마라.** 참고 자료로 **읽기만** 한다.
+- **코드를 손으로 복사해 정본을 두 벌 만들지 마라.** 이 저장소가 검색 구현의
+  정본이다.
+- `hidden_gold`, private answer key, credential을 읽거나 공개 저장소로 옮기지 마라.
+- push / force push / history rewrite / destructive reset 금지.
+- **오류를 빈 배열로 삼키거나 성공으로 위장하지 마라** — 아래 §5가 계약이다.
+
+## 5. 계약 — 오류 허용과 fail-closed의 경계
+
+이 둘을 섞으면 안 된다. **provider 문제는 강등, 보안 경계는 거부다.**
+
+| 상황 | 동작 |
+|---|---|
+| Obsidian CLI 불가 | filesystem graph로 **계속**. `status=partial`, `fallback_used="filesystem"`, `review_required=true`, warning 기록 |
+| BM25/graph walk 실패 | 현재 lexical 후보 **반환** |
+| 일부 파일 읽기 실패 | 성공분 + 실패 경로 **함께** 반환 |
+| 검색 0건 | **`review_required=true`.** "문서가 없다"고 확정하지 않는다 |
+| vault 밖 · `hidden_gold` · `private_eval` · symlink escape · non-Markdown | **fail-closed 거부.** partial이 아니다 |
+
+불변식: `1 <= output_k <= candidate_pool_k <= 500`,
+`len(retrieved_paths) <= output_k`, backlinks는 `limit`으로 잘리고 `truncated`를
+표시한다.
+
+## 6. 지금 막혀 있는 것 — 결함 3건
+
+전문은 [`E2E_REAL_VAULT_2026-08-12.md`](E2E_REAL_VAULT_2026-08-12.md).
+**증상만 기록했고 원인은 확정하지 않았다.**
+
+| # | 증상 | 왜 문제인가 |
+|---|---|---|
+| **D2** | `review_required`가 5건 **전부 true**. 회수 성공한 케이스도 같다 | 모든 응답이 같은 값이면 그 필드로 두 경우를 **구별할 수 없다.** agent가 신호를 무시하게 된다. `terminal_reason`이 늘 `turn-budget-exhausted`인 것이 원인으로 보인다 |
+| **D1** | archive 사본이 정본보다 먼저 온다 | C1이 회수한 것은 `archive/worktrees/…/obligation_layer_roadmap.md`이고 정본은 `concept-gate-taxonomy/docs/…`다. C4 MISS도 같은 계열 |
+| **D3** | `symlink-vs-moc`이 후보 풀에는 **있는데** 출력 8칸에 못 든다 | 이 workspace의 `CLAUDE.md`가 **recall 실패 사례로 명시한** 문서다. **graph walk는 도달했다 — 재순위 문제다**(아래 측정) |
+
+### D3는 측정으로 구별됐다 — graph walk가 아니라 재순위다
+
+이 handoff를 검증하며 실행한 결과:
+
+```
+symlink-vs-moc in retrieved_paths : False
+symlink-vs-moc in candidates      : False   ← 출력 8칸
+symlink-vs-moc in candidate_pool  : True    ← 후보 풀에는 있다
+discovered_path_count             : 247
+```
+
+**따라서 고칠 곳은 graph walk가 아니라 `authority_rank`/재순위다.** D1(archive
+사본이 정본보다 먼저)과 **같은 곳**일 가능성이 높다 — 둘 다 "닿았는데 순위에서
+밀린다"이다.
+
+주의 두 가지:
+
+- **`candidates`와 `candidate_pool`은 다른 필드다.** `candidates`는 `output_k`로
+  잘린 출력이고, 도달 여부는 `candidate_pool`로 봐야 한다. 이 문서의 초안이 그
+  둘을 뭉뚱그렸고, 그대로 따르면 "graph walk가 못 닿았다"는 **반대 결론**이 나왔다.
+- `discovered_path_count`는 **파라미터에 따라 달라진다** — 5문항 E2E는
+  `graph_seed_k=4, max_turns=4`로 132였고, 기본값으로는 247이다. 두 수를 같은
+  측정으로 취급하지 마라.
+
+### 이 문서는 자기 명령을 실행해서 검증했다
+
+§1·§7의 모든 명령을 **그대로 실행**했고 기대값과 일치했다(73 passed / 12 passed /
+D2 재현). 그 과정에서 **초안의 오류 하나가 잡혔다** — §6의 D3 지시가 `candidates`와
+`candidate_pool`을 뭉뚱그려, 따라 했으면 "graph walk가 못 닿았다"는 반대 결론이
+나왔을 것이다. 지금 본문은 정정본이고 정정 후 재실행까지 확인했다.
+
+**이 절차를 유지하라**: handoff를 고치면 그 안의 명령을 다시 실행한다. 실행되지
+않는 절차는 절차가 아니다.
+
+## 7. 다음 할 일 — D2부터
+
+**회수율보다 D2가 먼저다.** 지금은 "검토 필요"가 늘 참이라 그 신호가 무의미하고,
+D1·D3를 고쳐 회수가 올라가도 **여전히 구별이 안 된다.**
+
+```bash
+cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
+
+# 1) 재현 — 회수에 성공한 질의도 review_required=true인가
+python3 - <<'PY'
+import sys; sys.path.insert(0, ".")
+from evidence_evaluator.retrieval.profile import VaultProfile
+from evidence_evaluator.retrieval.service import RetrievalService
+svc = RetrievalService.from_profile(VaultProfile(
+    root="/Users/jaehyuntak/Desktop/Project_in_progress",
+    vault_name="Project_in_progress"))
+out = svc.search("concept gate obligation layer roadmap",
+                 output_k=8, candidate_pool_k=50)
+print("review_required :", out["review_required"])
+print("exhaustive      :", out["exhaustive"])
+print("terminal_reason :", out["terminal_reason"])
+PY
+
+# 2) 최소 수정 후 회귀 테스트를 tests/test_v01_tool_contract.py 에 추가한다
+#    — 성공한 검색이 review_required=false 를 낼 수 있어야 한다
+# 3) 5문항 E2E 재실행 (아래 §8)
+```
+
+**D3는 이미 구별됐다**(§6) — `candidate_pool`에 있고 출력 8칸에 없으므로 **재순위
+문제**다. D1과 같은 곳(`authority_rank`)일 가능성이 높으니 **둘을 함께 보라.**
+graph walk나 `max_turns`를 늘려서 고치려 하지 마라 — 도달은 이미 하고 있다.
+
+재현:
+
+```bash
+python3 - <<'PY'
+import sys; sys.path.insert(0, ".")
+from evidence_evaluator.retrieval.profile import VaultProfile
+from evidence_evaluator.retrieval.service import RetrievalService
+svc = RetrievalService.from_profile(VaultProfile(
+    root="/Users/jaehyuntak/Desktop/Project_in_progress",
+    vault_name="Project_in_progress"))
+out = svc.search("symlink versus MOC decision for canonical directory layout",
+                 output_k=8, candidate_pool_k=50)
+def paths(xs):
+    return [x if isinstance(x, str) else (x.get("path") or x.get("canonical_path"))
+            for x in (xs or [])]
+for field in ("retrieved_paths", "candidates", "candidate_pool"):
+    hit = any("symlink-vs-moc" in (p or "") for p in paths(out.get(field)))
+    print(f"{field:<18}: {hit}")
+PY
+```
+
+## 8. 5문항 E2E를 다시 돌리는 법
+
+스크립트는 세션 tmp에 있었고 **커밋되지 않았다**. 재작성이 필요하면
+[`E2E_REAL_VAULT_2026-08-12.md`](E2E_REAL_VAULT_2026-08-12.md)의 표에 5개 질의와
+기대 문서가 그대로 있다. 요건:
+
+- vault root는 **실제 workspace** (`/Users/jaehyuntak/Desktop/Project_in_progress`)
+- 세 도구를 **실제 stdio MCP 프로세스**로 호출한다 (in-process 호출로 대체하지
+  마라 — 지시서가 process boundary에서 판정하라고 요구한다)
+- CLI 부재 lane도 함께 돌린다: `OBSIDIAN_CLI=/nonexistent/...`
+- **실패 case를 지우거나 정답을 바꿔 맞추지 마라**
+
+## 9. Obsidian CLI에 대해 확립된 것 / 아닌 것
+
+**확립됨**: CLI는 **MCP 서버 프로세스에서 도달 가능하다** — C1의 backlinks가
+`fallback_used: null`로 5건 반환했다.
+
+**확립 안 됨**: "Obsidian 통합 완료"라고 쓰지 마라. `.handoff-reuse-subject-worktree/`,
+`.vault-harness/`, 중첩 worktree 경로는 `File not found`로 **실패한다**(Obsidian
+인덱스에 없는 dot 디렉터리). 그때 filesystem fallback이 동작하며, 그것은 **BLOCKED가
+아니라 설계된 강등**이다.
+
+## 10. 이 세션이 바꾼 파일
+
+- `evidence_evaluator/retrieval/service.py` — `backlinks()`, `fallback_used`,
+  `self.obsidian` 노출
+- `evidence_evaluator/retrieval/mcp_server.py` — `vault_backlinks` 등록
+- `tests/test_v01_tool_contract.py` (신규) — 실제 stdio 프로세스 12 cases
+- `tests/test_vault_retrieval_core.py` — service 층 gap 테스트
+- `tests/test_vault_retrieval_transports.py` — 도구 집합 2개 → 3개
+- `docs/PLAN_V01_AUDIT_AND_GAPS.md`, `docs/E2E_REAL_VAULT_2026-08-12.md` (신규)
+
+## 11. v0.1 완료 조건 대비 현황
+
+| # | 조건 | 상태 |
+|---|---|---|
+| 1 | 세 도구가 같은 canonical service를 쓴다 | **PASS** |
+| 2 | 실제 MCP process에서 search→read→backlinks | **PASS** |
+| 3 | 실제 Vault 5건 중 4건 이상 회수 | **FAIL (2/5)** |
+| 4 | private/out-of-vault/symlink 노출 0건 | **PASS** (12 cases) |
+| 5 | CLI 없어도 세 도구 작동 | **PASS** |
+| 6 | `output_k` 경계가 service·MCP에서 유지 | **PASS** |
+| 7 | 0건/partial을 absence로 과장하지 않음 | **PASS** |
+| 8 | README에 설치·profile·실행·오류 의미 | **부분** — `vault_backlinks`와 `fallback_used`가 아직 없다 |
+| 9 | focused + 전체 테스트 통과 | **PASS** (73) |
+| 10 | 실행 불가한 검증은 BLOCKED로 기록 | **PASS** |
+
+**3번과 8번이 남았다.**
