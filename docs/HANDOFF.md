@@ -294,7 +294,7 @@ PY
 | 5 | CLI 없어도 세 도구 작동 | **PASS** |
 | 6 | `output_k` 경계가 service·MCP에서 유지 | **PASS** |
 | 7 | 0건/partial을 absence로 과장하지 않음 | **PASS** |
-| 8 | README에 설치·profile·실행·오류 의미 | **부분** — `vault_backlinks`와 `fallback_used`가 아직 없다 |
+| 8 | README에 설치·profile·실행·오류 의미 | **PASS** — `vault_backlinks`·`fallback_used` 추가(2026-08-12) |
 | 9 | focused + 전체 테스트 통과 | **PASS** (74) |
 | 10 | 실행 불가한 검증은 BLOCKED로 기록 | **PASS** |
 
