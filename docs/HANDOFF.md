@@ -13,7 +13,7 @@ fixture로 만들고 최소 수정하는 것이 다음이다.
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
-python3 -m pytest tests/ -q                        # 73 passed 여야 한다
+python3 -m pytest tests/ -q                        # 74 passed 여야 한다
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
 
@@ -86,14 +86,14 @@ d93929c  feat — vault_backlinks 도구 + fallback_used 계약 필드
 `len(retrieved_paths) <= output_k`, backlinks는 `limit`으로 잘리고 `truncated`를
 표시한다.
 
-## 6. 지금 막혀 있는 것 — 결함 3건
+## 6. 지금 막혀 있는 것 — 결함 3건 (D2는 §7에서 고쳤다)
 
 전문은 [`E2E_REAL_VAULT_2026-08-12.md`](E2E_REAL_VAULT_2026-08-12.md).
-**증상만 기록했고 원인은 확정하지 않았다.**
+**D1·D3는 증상만 기록했고 원인은 확정하지 않았다.**
 
 | # | 증상 | 왜 문제인가 |
 |---|---|---|
-| **D2** | `review_required`가 5건 **전부 true**. 회수 성공한 케이스도 같다 | 모든 응답이 같은 값이면 그 필드로 두 경우를 **구별할 수 없다.** agent가 신호를 무시하게 된다. `terminal_reason`이 늘 `turn-budget-exhausted`인 것이 원인으로 보인다 |
+| **D2** | ~~`review_required`가 5건 전부 true~~ **고쳤다(§7)** — 원인은 `exhaustive`가 상수 `False`로 하드코딩된 것이었다. 실제 vault에서는 여전히 5/5 true이지만, 이제 그래프 밀도 때문이라는 것을 측정으로 확인했다(§7) |
 | **D1a** | 바이트 동일 사본 9벌 중 **worktree 사본**이 정본 슬롯을 가져간다 | `concept-gate-codex-mcp-wt/docs/…`가 canonical이 되고 `concept-gate-taxonomy/docs/…`가 replica로 밀렸다. **여기가 `authority_rank`의 유일한 사용처다**(§6a) |
 | **D1b** | 내용이 다른 **stale archive 문서**가 현재판보다 먼저 온다 | C1 top-8의 2위가 `archive/…/e2.1-wt/…`(10,278 B)이고 현재판(19,477 B)은 **pool 10위, 8칸 밖**이다. 둘은 digest가 달라 **replica가 아니다** — `authority_rank`는 이 경로에 아예 없다 |
 | **D3** | `symlink-vs-moc`이 후보 풀에는 **있는데** 출력 8칸에 못 든다 | 이 workspace의 `CLAUDE.md`가 **recall 실패 사례로 명시한** 문서다. **graph walk는 도달했다 — D1b와 같은 계열의 순위 문제다**(아래 측정) |
@@ -187,33 +187,37 @@ D2 재현). 그 과정에서 **초안의 오류 하나가 잡혔다** — §6의
 **이 절차를 유지하라**: handoff를 고치면 그 안의 명령을 다시 실행한다. 실행되지
 않는 절차는 절차가 아니다.
 
-## 7. 다음 할 일 — D2부터
+## 7. D2 — 고쳤다 (2026-08-12)
 
-**회수율보다 D2가 먼저다.** 지금은 "검토 필요"가 늘 참이라 그 신호가 무의미하고,
-D1·D3를 고쳐 회수가 올라가도 **여전히 구별이 안 된다.**
+**원인**: `retriever.py`가 `"exhaustive": False`를 **상수로 하드코딩**하고
+있었다. `service.py`의 `review_required = not exhaustive or bool(warnings)`는
+그래서 첫 항만으로 언제나 참이었다 — `terminal_reason`이 이미
+`graph-frontier-exhausted`/`no-lexical-entry`/`turn-budget-exhausted`를 계산해
+두고 있었는데도 반영하지 않았다.
 
-```bash
-cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
+**수정**: `exhaustive = (terminal_reason == "graph-frontier-exhausted")` —
+그래프가 스스로 닫힌 경우만 참이고, 예산 소진(`turn-budget-exhausted`)이나 어휘
+진입점이 아예 없던 경우(`no-lexical-entry`)는 계속 거짓이다.
 
-# 1) 재현 — 회수에 성공한 질의도 review_required=true인가
-python3 - <<'PY'
-import sys; sys.path.insert(0, ".")
-from evidence_evaluator.retrieval.profile import VaultProfile
-from evidence_evaluator.retrieval.service import RetrievalService
-svc = RetrievalService.from_profile(VaultProfile(
-    root="/Users/jaehyuntak/Desktop/Project_in_progress",
-    vault_name="Project_in_progress"))
-out = svc.search("concept gate obligation layer roadmap",
-                 output_k=8, candidate_pool_k=50)
-print("review_required :", out["review_required"])
-print("exhaustive      :", out["exhaustive"])
-print("terminal_reason :", out["terminal_reason"])
-PY
+**양방향 poison test로 확인**(`tests/test_vault_retrieval_core.py`):
 
-# 2) 최소 수정 후 회귀 테스트를 tests/test_v01_tool_contract.py 에 추가한다
-#    — 성공한 검색이 review_required=false 를 낼 수 있어야 한다
-# 3) 5문항 E2E 재실행 (아래 §8)
-```
+- `test_non_exhaustive_hit_requires_evidence_review` — 3-hop 체인을
+  `graph_seed_k=1, max_turns=2`로 예산만 소진시키는 fixture. **여전히
+  `review_required=True`.**
+- `test_a_fully_closed_search_can_report_review_required_false` (신규) — 작은
+  그래프가 실제로 다 닫히는 fixture. **`review_required=False`, `status=complete`**
+  — 이전 상수로는 낼 수 없던 값이다.
+
+`python3 -m pytest tests/ -q` → **74 passed**(기존 73 + poison test 1개).
+
+**실제 Vault에는 남는 한계가 있다** — 정직하게 적는다. 1,766문서·15,981엣지
+그래프는 밀도가 높아 `max_turns=20`으로 올려도 `discovered_path_count`가
+계속 늘어난다(175→218→257) — **닫히지 않고 계속 자란다.** 그래서 5문항 E2E는
+여전히 5/5 `review_required=True`다. **이것은 이제 공허가 아니라 사실이다** —
+이 규모의 vault에서 합리적인 turn 예산으로는 그래프가 진짜로 안 닫힌다. 신호
+자체가 무의미했던 이전 상태와 다르다: 작은 fixture에서 신호가 구별되는 것을
+단위테스트로 확인했고, 실제 vault에서 늘 `True`인 것은 이 vault의 그래프
+밀도가 만든 **정직한** 결과다.
 
 **D3는 이미 구별됐다**(§6) — `candidate_pool`에 있고 출력 8칸에 없으므로 **재순위
 문제**다. **D1b와 함께 보라**(§6a): 둘 다 RRF 순위이지 `authority_rank`가 아니다.
@@ -272,6 +276,12 @@ PY
 - `tests/test_vault_retrieval_core.py` — service 층 gap 테스트
 - `tests/test_vault_retrieval_transports.py` — 도구 집합 2개 → 3개
 - `docs/PLAN_V01_AUDIT_AND_GAPS.md`, `docs/E2E_REAL_VAULT_2026-08-12.md` (신규)
+- `evidence_evaluator/retrieval/retriever.py` — D2 수정: `exhaustive`를
+  `terminal_reason`에서 계산(이전엔 상수 `False`)
+- `tests/test_vault_retrieval_core.py` — D2 poison test 1개 추가, 기존 2개를
+  실제 측정값(`graph-frontier-exhausted`)으로 정정
+- `docs/AUDIT_CLAUDE_MD_VACUOUS_PATTERNS.md` (신규) — CLAUDE.md·harness의
+  공허 패턴 감사, D2 설계 제약의 근거
 
 ## 11. v0.1 완료 조건 대비 현황
 
@@ -285,7 +295,7 @@ PY
 | 6 | `output_k` 경계가 service·MCP에서 유지 | **PASS** |
 | 7 | 0건/partial을 absence로 과장하지 않음 | **PASS** |
 | 8 | README에 설치·profile·실행·오류 의미 | **부분** — `vault_backlinks`와 `fallback_used`가 아직 없다 |
-| 9 | focused + 전체 테스트 통과 | **PASS** (73) |
+| 9 | focused + 전체 테스트 통과 | **PASS** (74) |
 | 10 | 실행 불가한 검증은 BLOCKED로 기록 | **PASS** |
 
 **3번과 8번이 남았다.**

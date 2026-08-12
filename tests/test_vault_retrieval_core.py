@@ -139,7 +139,13 @@ def test_recall_first_recovers_zero_overlap_authority_by_two_graph_hops(
         item for item in result["candidates"] if item["path"] == "deep/authority.md"
     )
     assert "graph" in authority["channel_ranks"]
-    assert result["exhaustive"] is False
+    # This tiny fixture's graph fully closes within the turn budget --
+    # `graph-frontier-exhausted`, not a budget cutoff. See D2
+    # (docs/HANDOFF.md): `exhaustive` used to be a hardcoded `False`
+    # regardless of `terminal_reason`, which is why this assertion used to
+    # read `is False` here too.
+    assert result["exhaustive"] is True
+    assert result["terminal_reason"] == "graph-frontier-exhausted"
 
 
 def test_graph_frontier_beats_a_full_lexical_tail(tmp_path: Path) -> None:
@@ -268,19 +274,59 @@ def test_zero_hit_is_structurally_inconclusive(profile: VaultProfile) -> None:
 
 
 def test_non_exhaustive_hit_requires_evidence_review(tmp_path: Path) -> None:
-    (tmp_path / "HANDOFF.md").write_text("needle state", encoding="utf-8")
+    """A budget cutoff before the graph frontier closes must stay flagged.
+
+    D2 (docs/HANDOFF.md, docs/AUDIT_CLAUDE_MD_VACUOUS_PATTERNS.md): the field
+    used to be a hardcoded constant, so it fired the same way regardless of
+    what actually happened. This fixture is built so `graph_seed_k=1,
+    max_turns=2` cannot reach the end of a 3-hop chain -- the loop exhausts
+    its TURN budget, not the graph -- so `terminal_reason` must read
+    `turn-budget-exhausted`, not the frontier-closed value.
+    """
+    (tmp_path / "HANDOFF.md").write_text("needle state [[a1]]", encoding="utf-8")
+    (tmp_path / "a1.md").write_text("hop one [[a2]]", encoding="utf-8")
+    (tmp_path / "a2.md").write_text("hop two [[a3]]", encoding="utf-8")
+    (tmp_path / "a3.md").write_text(
+        "hop three, no further needle overlap here", encoding="utf-8"
+    )
     result = RetrievalService(
         VaultProfile(root=tmp_path, obsidian_enabled=False)
     ).search(
         "needle",
-        output_k=1,
-        candidate_pool_k=1,
+        output_k=4,
+        candidate_pool_k=4,
         graph_seed_k=1,
         max_turns=2,
     )
+    assert result["terminal_reason"] == "turn-budget-exhausted"
     assert result["exhaustive"] is False
     assert result["review_required"] is True
     assert result["status"] == "review_required"
+
+
+def test_a_fully_closed_search_can_report_review_required_false(
+    profile: VaultProfile,
+) -> None:
+    """The other half of the D2 poison test.
+
+    A field that is always true carries the same zero information as one that
+    is always false (docs/AUDIT_CLAUDE_MD_VACUOUS_PATTERNS.md). This is the
+    direction the earlier hardcoded constant could never produce: a search
+    whose graph frontier genuinely closes, with no provider fallback, must be
+    able to say so.
+    """
+    result = RetrievalService(profile).search(
+        "frost resume",
+        output_k=4,
+        candidate_pool_k=10,
+        graph_seed_k=3,
+        max_turns=4,
+    )
+    assert result["terminal_reason"] == "graph-frontier-exhausted"
+    assert result["warnings"] == []
+    assert result["exhaustive"] is True
+    assert result["review_required"] is False
+    assert result["status"] == "complete"
 
 
 def test_obsidian_adapter_scopes_every_call_with_cwd_and_canonical_path(
