@@ -94,8 +94,9 @@ d93929c  feat — vault_backlinks 도구 + fallback_used 계약 필드
 | # | 증상 | 왜 문제인가 |
 |---|---|---|
 | **D2** | `review_required`가 5건 **전부 true**. 회수 성공한 케이스도 같다 | 모든 응답이 같은 값이면 그 필드로 두 경우를 **구별할 수 없다.** agent가 신호를 무시하게 된다. `terminal_reason`이 늘 `turn-budget-exhausted`인 것이 원인으로 보인다 |
-| **D1** | archive 사본이 정본보다 먼저 온다 | C1이 회수한 것은 `archive/worktrees/…/obligation_layer_roadmap.md`이고 정본은 `concept-gate-taxonomy/docs/…`다. C4 MISS도 같은 계열 |
-| **D3** | `symlink-vs-moc`이 후보 풀에는 **있는데** 출력 8칸에 못 든다 | 이 workspace의 `CLAUDE.md`가 **recall 실패 사례로 명시한** 문서다. **graph walk는 도달했다 — 재순위 문제다**(아래 측정) |
+| **D1a** | 바이트 동일 사본 9벌 중 **worktree 사본**이 정본 슬롯을 가져간다 | `concept-gate-codex-mcp-wt/docs/…`가 canonical이 되고 `concept-gate-taxonomy/docs/…`가 replica로 밀렸다. **여기가 `authority_rank`의 유일한 사용처다**(§6a) |
+| **D1b** | 내용이 다른 **stale archive 문서**가 현재판보다 먼저 온다 | C1 top-8의 2위가 `archive/…/e2.1-wt/…`(10,278 B)이고 현재판(19,477 B)은 **pool 10위, 8칸 밖**이다. 둘은 digest가 달라 **replica가 아니다** — `authority_rank`는 이 경로에 아예 없다 |
+| **D3** | `symlink-vs-moc`이 후보 풀에는 **있는데** 출력 8칸에 못 든다 | 이 workspace의 `CLAUDE.md`가 **recall 실패 사례로 명시한** 문서다. **graph walk는 도달했다 — D1b와 같은 계열의 순위 문제다**(아래 측정) |
 
 ### D3는 측정으로 구별됐다 — graph walk가 아니라 재순위다
 
@@ -108,9 +109,8 @@ symlink-vs-moc in candidate_pool  : True    ← 후보 풀에는 있다
 discovered_path_count             : 247
 ```
 
-**따라서 고칠 곳은 graph walk가 아니라 `authority_rank`/재순위다.** D1(archive
-사본이 정본보다 먼저)과 **같은 곳**일 가능성이 높다 — 둘 다 "닿았는데 순위에서
-밀린다"이다.
+**따라서 고칠 곳은 graph walk가 아니라 재순위다.** 다만 **그 재순위는
+`authority_rank`가 아니다** — 아래 §6a가 그 이유다.
 
 주의 두 가지:
 
@@ -120,6 +120,62 @@ discovered_path_count             : 247
 - `discovered_path_count`는 **파라미터에 따라 달라진다** — 5문항 E2E는
   `graph_seed_k=4, max_turns=4`로 132였고, 기본값으로는 247이다. 두 수를 같은
   측정으로 취급하지 마라.
+
+### 6a. `authority_rank`는 검색 순위를 매기지 않는다 (측정)
+
+**이 절은 이 handoff의 이전 판을 정정한다.** 이전 판은 D1·D3의 수정 지점으로
+`authority_rank`를 지목했다. 코드를 읽고 측정한 결과 **틀렸다.**
+
+**사용처는 코드 전체에서 한 곳뿐이다** — `corpus.py:185-188`:
+
+```python
+for digest, replicas in sorted(by_digest.items()):     # sha256으로 묶은 뒤
+    canonical = min(replicas, key=lambda i: self.profile.authority_rank(i.relative))
+```
+
+즉 **바이트 동일 사본들 중 대표 하나를 고르는 것**이 전부다. 검색 순위는
+`retriever.py`의 RRF가 `exact`/`bm25`/`graph`(weight 3.0) 세 채널로만 정하고,
+**`authority_rank`를 한 번도 참조하지 않는다.**
+
+**순위 함수 자체도 지금은 알파벳순이다.** `authority_rank`는
+`authority_prefixes`에서 접두사를 찾아 그 인덱스를 돌려주는데,
+MCP 서버가 쓰는 `VaultProfile.from_env()`는 **이 필드를 아예 넘기지 않는다** →
+`authority_prefixes = ()`. 측정값:
+
+```
+from_env authority_prefixes = ()
+authority_rank('archive/…')             = (0, 'archive/…')
+authority_rank('concept-gate-taxonomy/…') = (0, 'concept-gate-taxonomy/…')
+```
+
+1항이 둘 다 `0`이므로 `min`은 2항, 즉 **경로 문자열 사전순**으로 결정된다.
+`examples/vault-profile.example.json`에는 `authority_prefixes`가 있지만 **E2E는 그
+프로파일을 쓰지 않았다.**
+
+그래서 실제로 일어난 일(측정):
+
+```
+정본 후보 9벌은 전부 sha 78731601dbfe (19,477 B)
+  → canonical = concept-gate-codex-mcp-wt/docs/…   ("codex" < "taxonomy")
+  → concept-gate-taxonomy/docs/… 는 replica 로 강등            ← D1a
+
+C1이 회수한 archive 사본 = sha 1fed33e8abce (10,278 B)
+  → digest가 달라 애초에 같은 그룹이 아니다 = replica가 아니다
+  → authority_rank는 이 둘을 비교한 적이 없고, 비교할 수도 없다  ← D1b
+```
+
+**두 결함은 코드 경로가 다르다:**
+
+| | 무엇 | 고칠 곳 |
+|---|---|---|
+| **D1a** | 동일 사본 중 대표 선택이 알파벳순 | `authority_prefixes`를 실제로 설정한다(`from_env`가 넘기지 않는 것부터) |
+| **D1b·D3** | 내용이 다른 stale/무관 문서가 RRF에서 이긴다 | **RRF 쪽이다.** `archive/`를 `excluded_globs`로 빼거나, 점수에 경로 권위 항을 넣거나 |
+
+D1b를 `authority_prefixes`로 고치려 하지 마라 — **그 코드는 실행되지 않는다.**
+stale archive는 replica가 아니라 별개 문서다.
+
+참고로 현재판이 진 이유의 유력 후보는 **BM25 길이 정규화**다(1,094 vs 681 토큰,
+짧은 stale 쪽이 유리). 다만 이건 **측정하지 않았다** — 가설이다.
 
 ### 이 문서는 자기 명령을 실행해서 검증했다
 
@@ -160,8 +216,9 @@ PY
 ```
 
 **D3는 이미 구별됐다**(§6) — `candidate_pool`에 있고 출력 8칸에 없으므로 **재순위
-문제**다. D1과 같은 곳(`authority_rank`)일 가능성이 높으니 **둘을 함께 보라.**
+문제**다. **D1b와 함께 보라**(§6a): 둘 다 RRF 순위이지 `authority_rank`가 아니다.
 graph walk나 `max_turns`를 늘려서 고치려 하지 마라 — 도달은 이미 하고 있다.
+**D1a는 별개 작업이다**(대표 선택, `authority_prefixes` 설정).
 
 재현:
 

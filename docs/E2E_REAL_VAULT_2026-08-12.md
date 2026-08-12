@@ -45,7 +45,15 @@ filesystem fallback **성공** / 경로별 CLI 실패는 **BLOCKED가 아니라 
 C1은 `archive/worktrees/concept-gate-e2.1-wt/docs/obligation_layer_roadmap.md`를
 회수했다 — **archive 사본**이고 정본은
 `concept-gate-taxonomy/docs/obligation_layer_roadmap.md`다. top-1은 아예 다른
-문서였다. `authority_rank`가 archive/worktree 사본을 정본보다 낮게 놓지 못한다.
+문서였다.
+
+> **정정 (2026-08-12, 사후 측정).** 이 절의 초판은 원인을 "`authority_rank`가
+> archive 사본을 낮게 놓지 못한다"로 적었다. **틀렸다.** 두 파일은 digest가 달라
+> (10,278 B vs 19,477 B) **replica가 아니고**, `authority_rank`는 바이트 동일
+> 사본의 대표를 고를 때만 쓰인다 — 이 둘을 비교한 적이 없다. 실제로는 **두 개의
+> 다른 결함**이다: (D1a) 동일 사본 9벌의 대표가 알파벳순으로 worktree 사본에
+> 갔고, (D1b) 내용이 다른 stale archive 문서가 **RRF에서** 현재판을 이겼다
+> (현재판은 pool 10위, 8칸 밖). 근거와 수치는 `docs/HANDOFF.md` §6a.
 
 **C4의 MISS도 같은 계열이다** — 동명·중복 경로가 8칸을 채웠다.
 
