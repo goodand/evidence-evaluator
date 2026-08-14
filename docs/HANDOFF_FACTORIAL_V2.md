@@ -14,7 +14,7 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
 - Transport qualification: **PASS**, 6/6 accepted, 0 invalid runs.
 - Qualification freeze: `5187e0e9442b70131eb8bdc440f5d6990076d44198912ae721946ef3afe3c255`.
 - Factorial set: **frozen**, 16 independently drafted synthetic cases.
-- Factorial freeze: `7efd1b8a05e6f6d84f7ad98ce8a1b5632c6fea46fe93bccf5600c9abf0818456`.
+- Factorial freeze: `291c05be61c05a77c727c959bda95ef587a1ba306f92403668d7c7a72eb05e1d`.
 - Development canary: **PASS** for `DEV-01/S_DYNAMIC`; full hard gate true,
   critical-path recall 1.0, exact authority hit, 0 invalid runs, and no guard
   rejection. This single cell establishes plumbing only.
@@ -22,6 +22,10 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
 - Performance claims: **none yet**.
 
 The private corpus, cases, gold, curator draft, structural qualification, and freeze receipt are under ignored `private_eval/handoff-factorial-v2/`. They must not be pushed.
+The receipt is also checked against the git-tracked trust root in
+`evidence_evaluator/factorial_pin.py`; regenerating the private receipt alone
+does not authorize a changed experiment. Public execution also requires the
+pin bytes to match `HEAD`, so a detached bundle or dirty pin fails closed.
 
 ## Arms
 

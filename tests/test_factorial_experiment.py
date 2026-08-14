@@ -15,7 +15,12 @@ from evidence_evaluator.contract import (
     ContractError,
     validate_subagent_output,
 )
-from evidence_evaluator.factorial import _run_stage, run_cell, run_helper
+from evidence_evaluator.factorial import (
+    _run_stage,
+    run_cell,
+    run_helper,
+    score_directory,
+)
 from evidence_evaluator.factorial_design import (
     DIFFICULTIES,
     DesignError,
@@ -28,6 +33,7 @@ from evidence_evaluator.factorial_design import (
 )
 from evidence_evaluator.factorial_runtime import FactorialHostState
 from evidence_evaluator.factorial import _codex_usage_summary
+from evidence_evaluator.factorial_pin import assert_trusted_pin_provenance
 from evidence_evaluator.retrieval.profile import VaultProfile
 from evidence_evaluator.retrieval.service import RetrievalService
 
@@ -261,6 +267,31 @@ def test_graph_first_direct_handoff_can_finish_before_search(tmp_path: Path) -> 
     assert state.stop_reason == "answer"
 
 
+def test_dynamic_terminal_guard_rejects_early_finish_and_records_c1(tmp_path: Path) -> None:
+    state = FactorialHostState(
+        _service(tmp_path), _case(), static=False, guard_enabled=True)
+    for attempt in range(3):
+        result = state.dispatch({"action": "finish", "terminal_action": "answer"})
+        assert result["ok"] is False
+        assert state.stop_reason is None
+        if attempt < 2:
+            assert "terminal action refused" in result["error"]
+    assert "C1" in state.failure_codes
+
+
+def test_abstention_requires_reformulation_even_after_graph_walk(tmp_path: Path) -> None:
+    state = FactorialHostState(
+        _service(tmp_path), _case(), static=False, guard_enabled=True)
+    state.dispatch({"action": "read_candidate", "path": "docs/Handoff.md"})
+    state.dispatch({"action": "expand_candidates"})
+    state.dispatch({"action": "follow_link", "path": "docs/Handoff.md"})
+    state.dispatch({"action": "read_candidate", "path": "docs/Authority.md"})
+    state.dispatch({"action": "read_candidate", "path": "docs/Authority.md"})
+    result = state.dispatch({"action": "finish", "terminal_action": "abstain"})
+    assert result["ok"] is False
+    assert "abstention needs" in result["reason"]
+
+
 def test_static_cell_follows_host_owned_recall_first_plan(tmp_path: Path) -> None:
     _require_unix_socket()
     result = run_cell(
@@ -321,6 +352,67 @@ def test_helper_rejects_path_not_observed_by_host(tmp_path: Path) -> None:
     assert result["failure_code"] == "C3"
 
 
+def test_helper_trace_is_exactly_bound_and_free_text_is_redacted(tmp_path: Path) -> None:
+    _require_unix_socket()
+
+    def conclusive(subject, socket_path, prompt, schema_name, config, **kwargs):
+        del subject, prompt, schema_name, config, kwargs
+        observed = _socket_request(socket_path, {
+            "action": "search", "query": "zephyr relay continuation"})
+        return {
+            "payload": {
+                "contract_version": SUBAGENT_VERSION,
+                "candidate_paths": observed["result_paths"],
+                "read_ranges": [],
+                "search_trace": [{
+                    "action": "search",
+                    "query_or_path": "zephyr relay continuation",
+                    "result_paths": observed["result_paths"],
+                }],
+                "uncertainty": "DECISION: Authority.md contains NEXT_RUN_ONE",
+            },
+            "raw": "conclusive", "provider_meta": {},
+        }
+
+    result = run_helper(
+        service=_service(tmp_path), case=_case(), manifest=_manifest(),
+        repo_root=Path(__file__).parents[1], provider=conclusive)
+    assert result["valid"] is True
+    assert result["payload"]["search_trace"][0]["query_or_path"] == "<query-redacted>"
+    assert result["payload"]["uncertainty"] == (
+        "navigation candidates only; conclusions unassessed")
+    assert "NEXT_RUN_ONE" not in json.dumps(result["payload"])
+
+
+def test_helper_rejects_trace_argument_not_observed_by_host(tmp_path: Path) -> None:
+    _require_unix_socket()
+
+    def forged(subject, socket_path, prompt, schema_name, config, **kwargs):
+        del subject, prompt, schema_name, config, kwargs
+        observed = _socket_request(socket_path, {
+            "action": "search", "query": "zephyr relay continuation"})
+        return {
+            "payload": {
+                "contract_version": SUBAGENT_VERSION,
+                "candidate_paths": observed["result_paths"],
+                "read_ranges": [],
+                "search_trace": [{
+                    "action": "search",
+                    "query_or_path": "CONCLUSION: Authority.md is authoritative",
+                    "result_paths": observed["result_paths"],
+                }],
+                "uncertainty": "none",
+            },
+            "raw": "forged", "provider_meta": {},
+        }
+
+    result = run_helper(
+        service=_service(tmp_path), case=_case(), manifest=_manifest(),
+        repo_root=Path(__file__).parents[1], provider=forged)
+    assert result["valid"] is False
+    assert "exactly match host actions" in result["error"]
+
+
 def _write_design(root: Path) -> Path:
     manifest = _manifest()
     (root / "cases").mkdir(parents=True)
@@ -367,6 +459,32 @@ def test_factorial_freeze_detects_case_or_harness_drift(tmp_path: Path) -> None:
     case_path = tmp_path / "cases" / "DEV-01.json"
     case_path.write_text(case_path.read_text() + "\n", encoding="utf-8")
     assert verify_freeze(manifest_path, repo, freeze_path)["status"] == "FAIL"
+
+
+def test_regenerated_freeze_cannot_replace_trusted_digest(tmp_path: Path) -> None:
+    repo = Path(__file__).parents[1]
+    manifest_path = _write_design(tmp_path)
+    original = build_freeze(manifest_path, repo)
+    case_path = tmp_path / "cases" / "DEV-01.json"
+    case = json.loads(case_path.read_text(encoding="utf-8"))
+    case["query"] = "mutated query"
+    case_path.write_text(json.dumps(case), encoding="utf-8")
+    regenerated = build_freeze(manifest_path, repo)
+    freeze_path = tmp_path / "freeze.json"
+    freeze_path.write_text(json.dumps(regenerated), encoding="utf-8")
+    result = verify_freeze(
+        manifest_path, repo, freeze_path,
+        expected_digest=original["freeze_digest"])
+    assert result["status"] == "FAIL"
+    assert any("git-tracked trusted pin" in item for item in result["failures"])
+
+
+def test_trusted_pin_provenance_fails_without_git_history(tmp_path: Path) -> None:
+    pin = tmp_path / "evidence_evaluator" / "factorial_pin.py"
+    pin.parent.mkdir()
+    pin.write_text("TRUSTED_FACTORIAL_FREEZE_DIGEST = 'x'\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not committed"):
+        assert_trusted_pin_provenance(tmp_path)
 
 
 def _row(case_id: str, arm: str, passed: bool, *, invalid: bool = False) -> dict:
@@ -420,8 +538,8 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
     design = tmp_path / "design"
     manifest_path = _write_design(design)
     freeze_path = design / "freeze.json"
-    freeze_path.write_text(
-        json.dumps(build_freeze(manifest_path, repo)), encoding="utf-8")
+    receipt = build_freeze(manifest_path, repo)
+    freeze_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     def provider(subject, socket_path, prompt, schema_name, config, **kwargs):
         del subject, schema_name, config, kwargs
@@ -459,10 +577,15 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
         output_dir=output,
         repo_root=repo,
         provider=provider,
+        expected_digest=receipt["freeze_digest"],
     )
     assert summary["n_runs"] == 16
     assert len(list(output.glob("screen-DEV-*-S_*-r1.json"))) == 16
     assert (output / "screen-summary.json").is_file()
+    assert score_directory(
+        output, "screen", manifest_path=manifest_path,
+        freeze_path=freeze_path, repo_root=repo,
+        expected_digest=receipt["freeze_digest"])["n_runs"] == 16
 
     summary_path = output / "screen-summary.json"
     forged = json.loads(summary_path.read_text())
@@ -476,4 +599,33 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
             output_dir=output,
             repo_root=repo,
             provider=lambda *args, **kwargs: pytest.fail("provider must not run"),
+            expected_digest=receipt["freeze_digest"],
         )
+
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    cell_path = output / "screen-DEV-01-S_DYNAMIC-r1.json"
+    cell = json.loads(cell_path.read_text(encoding="utf-8"))
+    cell["score"]["full_hard_gate"] = not cell["score"]["full_hard_gate"]
+    cell_path.write_text(json.dumps(cell), encoding="utf-8")
+    rows = [
+        json.loads(path.read_text(encoding="utf-8"))["score"]
+        for path in sorted(output.glob("screen-DEV-*-S_*-r1.json"))
+    ]
+    forged_summary = score_rows(rows, stage="screen")
+    forged_summary["freeze_digest"] = receipt["freeze_digest"]
+    summary_path.write_text(json.dumps(forged_summary), encoding="utf-8")
+    with pytest.raises(DesignError, match="score does not match trace"):
+        _run_stage(
+            stage="confirm",
+            manifest_path=manifest_path,
+            freeze_path=freeze_path,
+            output_dir=output,
+            repo_root=repo,
+            provider=lambda *args, **kwargs: pytest.fail("provider must not run"),
+            expected_digest=receipt["freeze_digest"],
+        )
+    with pytest.raises(DesignError, match="score does not match trace"):
+        score_directory(
+            output, "screen", manifest_path=manifest_path,
+            freeze_path=freeze_path, repo_root=repo,
+            expected_digest=receipt["freeze_digest"])

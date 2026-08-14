@@ -42,6 +42,10 @@ from .factorial_runtime import (
     FactorialHostState,
     ToolServer,
 )
+from .factorial_pin import (
+    TRUSTED_FACTORIAL_FREEZE_DIGEST,
+    assert_trusted_pin_provenance,
+)
 from .providers import ProviderError, run_codex_mcp_cli, validate_against_schema
 from .retrieval.profile import VaultProfile
 from .retrieval.service import RetrievalService
@@ -236,13 +240,24 @@ def run_helper(
         for item in validated["search_trace"]:
             if not set(item["result_paths"]) <= observed_candidates:
                 raise ContractError("C3: helper search trace names an unobserved path")
-        observed_actions = {
-            "search" if item["action"] == "reformulate_query" else item["action"]
+        host_search_trace = [
+            {
+                "action": (
+                    "search" if item["action"] == "reformulate_query"
+                    else item["action"]
+                ),
+                "query_or_path": item["trace_argument"],
+                "result_paths": item["result_paths"],
+            }
             for item in state.actions
-        }
-        claimed_actions = {item["action"] for item in validated["search_trace"]}
-        if not claimed_actions <= observed_actions:
-            raise ContractError("C3: helper search trace names an unobserved action")
+            if item["accepted"] and item["action"] in {
+                "reformulate_query", "follow_link", "read_candidate",
+                "expand_candidates",
+            }
+        ]
+        if validated["search_trace"] != host_search_trace:
+            raise ContractError(
+                "C3: helper search trace does not exactly match host actions")
         observed_reads = {
             (item["path"], item["start"], item["end"]) for item in state.reads
         }
@@ -263,10 +278,25 @@ def run_helper(
             "provider_meta": provider_meta,
             "raw": raw,
         }
+    safe_trace = [
+        {
+            **item,
+            "query_or_path": (
+                "<query-redacted>" if item["action"] == "search"
+                else item["query_or_path"]
+            ),
+        }
+        for item in validated["search_trace"]
+    ]
+    safe_payload = {
+        **validated,
+        "search_trace": safe_trace,
+        "uncertainty": "navigation candidates only; conclusions unassessed",
+    }
     return {
         "contract_version": SUBAGENT_VERSION,
         "valid": True,
-        "payload": validated,
+        "payload": safe_payload,
         "host_trace": state.trace_fields(),
         "provider_meta": provider_meta,
         "raw": raw,
@@ -318,6 +348,40 @@ def _trace_from_payload(
     return trace
 
 
+def _score_trace(
+    trace: dict[str, Any],
+    gold: dict[str, Any],
+    case: dict[str, Any],
+    *,
+    replicate: int,
+    main_usage: dict[str, int] | None = None,
+    helper_usage: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    main_usage = main_usage or {}
+    helper_usage = helper_usage or {}
+    score = evaluate(trace, gold, case)
+    score.update({
+        "contract_version": RUN_VERSION,
+        "replicate": replicate,
+        "is_absent": gold["is_absent"],
+        "correct_abstention": bool(
+            gold["is_absent"] and trace.get("declared_absent")
+            and not score["invalid_run"]
+        ),
+        "premature_stop": "C1" in trace["failure_codes"],
+        "retrieval_actions": trace.get("retrieval_actions", 0),
+        "main_input_tokens": int(main_usage.get("input_tokens", 0)),
+        "helper_input_tokens": int(helper_usage.get("input_tokens", 0)),
+        "total_input_tokens": int(main_usage.get("input_tokens", 0))
+        + int(helper_usage.get("input_tokens", 0)),
+        "main_output_tokens": int(main_usage.get("output_tokens", 0)),
+        "helper_output_tokens": int(helper_usage.get("output_tokens", 0)),
+        "total_output_tokens": int(main_usage.get("output_tokens", 0))
+        + int(helper_usage.get("output_tokens", 0)),
+    })
+    return score
+
+
 def run_cell(
     *,
     service: RetrievalService,
@@ -350,12 +414,9 @@ def run_cell(
             "stop_reason": "V1", "n_search": 0, "n_read": 0,
             "retrieval_actions": 0, "wall_clock_ms": 0,
         }
-        score = evaluate(trace, gold, case)
-        score.update({
-            "contract_version": RUN_VERSION, "replicate": replicate,
-            "is_absent": gold["is_absent"], "correct_abstention": False,
-            "premature_stop": False, "retrieval_actions": 0,
-        })
+        score = _score_trace(
+            trace, gold, case, replicate=replicate,
+            helper_usage=dict((helper.get("provider_meta") or {}).get("usage") or {}))
         return {
             "contract_version": RUN_VERSION, "case_id": case["id"],
             "arm": arm, "replicate": replicate, "trace": trace,
@@ -408,28 +469,11 @@ def run_cell(
             "retrieval_actions": 0,
             "wall_clock_ms": 0,
         }
-    score = evaluate(trace, gold, case)
     main_usage = dict(provider_meta.get("usage") or {})
     helper_usage = dict(((helper or {}).get("provider_meta") or {}).get("usage") or {})
-    score.update({
-        "contract_version": RUN_VERSION,
-        "replicate": replicate,
-        "is_absent": gold["is_absent"],
-        "correct_abstention": bool(
-            gold["is_absent"] and trace.get("declared_absent")
-            and not score["invalid_run"]
-        ),
-        "premature_stop": "C1" in trace["failure_codes"],
-        "retrieval_actions": trace.get("retrieval_actions", 0),
-        "main_input_tokens": int(main_usage.get("input_tokens", 0)),
-        "helper_input_tokens": int(helper_usage.get("input_tokens", 0)),
-        "total_input_tokens": int(main_usage.get("input_tokens", 0))
-        + int(helper_usage.get("input_tokens", 0)),
-        "main_output_tokens": int(main_usage.get("output_tokens", 0)),
-        "helper_output_tokens": int(helper_usage.get("output_tokens", 0)),
-        "total_output_tokens": int(main_usage.get("output_tokens", 0))
-        + int(helper_usage.get("output_tokens", 0)),
-    })
+    score = _score_trace(
+        trace, gold, case, replicate=replicate,
+        main_usage=main_usage, helper_usage=helper_usage)
     return {
         "contract_version": RUN_VERSION,
         "case_id": case["id"],
@@ -441,6 +485,47 @@ def run_cell(
         "provider_meta": provider_meta,
         "raw": raw,
     }
+
+
+def _validated_run_score(
+    path: Path,
+    *,
+    case: dict[str, Any],
+    gold: dict[str, Any],
+    arm: str,
+    replicate: int,
+    helper: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    artifact = load_json(path)
+    if (
+        artifact.get("contract_version") != RUN_VERSION
+        or artifact.get("case_id") != case["id"]
+        or artifact.get("arm") != arm
+        or artifact.get("replicate") != replicate
+    ):
+        raise DesignError(f"screen artifact metadata does not match {path.name}")
+    trace = artifact.get("trace")
+    if not isinstance(trace, dict):
+        raise DesignError(f"screen artifact has no trace: {path.name}")
+    try:
+        validate_trace(trace)
+    except ContractError as exc:
+        raise DesignError(f"screen artifact trace is invalid: {path.name}: {exc}") from exc
+    if trace.get("case_id") != case["id"] or trace.get("arm") != arm:
+        raise DesignError(f"screen trace metadata does not match {path.name}")
+    if arm.startswith("R_"):
+        if not isinstance(helper, dict):
+            raise DesignError(f"retrieval arm has no helper artifact: {path.name}")
+        if trace.get("subagent_output") != helper.get("payload"):
+            raise DesignError(f"helper payload does not match trace: {path.name}")
+    expected = _score_trace(
+        trace, gold, case, replicate=replicate,
+        main_usage=_codex_usage_summary(str(artifact.get("raw", ""))),
+        helper_usage=_codex_usage_summary(str((helper or {}).get("raw", ""))),
+    )
+    if artifact.get("score") != expected:
+        raise DesignError(f"screen artifact score does not match trace: {path.name}")
+    return expected
 
 
 def _arm_order(case_id: str, replicate: int, arms: tuple[str, ...]) -> list[str]:
@@ -465,9 +550,12 @@ def _run_stage(
     output_dir: Path,
     repo_root: Path,
     provider: Provider = run_codex_mcp_cli,
+    expected_digest: str = TRUSTED_FACTORIAL_FREEZE_DIGEST,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
-    freeze_status = verify_freeze(manifest_path, repo_root, freeze_path)
+    freeze_status = verify_freeze(
+        manifest_path, repo_root, freeze_path,
+        expected_digest=expected_digest)
     if freeze_status["status"] != "PASS":
         raise DesignError(f"frozen surface is stale: {freeze_status['failures']}")
     cases, gold = load_cases_and_gold(manifest_path)
@@ -488,7 +576,13 @@ def _run_stage(
         actual_screen_paths = set(output_dir.glob("screen-DEV-*-S_*-r1.json"))
         if actual_screen_paths != expected_screen_paths:
             raise DesignError("screen artifact matrix is incomplete or contains extras")
-        screen_rows = [load_json(path)["score"] for path in sorted(actual_screen_paths)]
+        screen_rows = []
+        for case_id in manifest["splits"]["development"]:
+            for arm in ("S_STATIC", "S_DYNAMIC"):
+                path = output_dir / f"screen-{case_id}-{arm}-r1.json"
+                screen_rows.append(_validated_run_score(
+                    path, case=cases[case_id], gold=gold[case_id], arm=arm,
+                    replicate=1))
         recomputed_screen = score_rows(screen_rows, stage="screen")
         recomputed_screen["freeze_digest"] = freeze_status["freeze_digest"]
         if screen != recomputed_screen:
@@ -552,7 +646,9 @@ def _run_canary(
     provider: Provider = run_codex_mcp_cli,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
-    freeze_status = verify_freeze(manifest_path, repo_root, freeze_path)
+    freeze_status = verify_freeze(
+        manifest_path, repo_root, freeze_path,
+        expected_digest=TRUSTED_FACTORIAL_FREEZE_DIGEST)
     if freeze_status["status"] != "PASS":
         raise DesignError(f"frozen surface is stale: {freeze_status['failures']}")
     cases, gold = load_cases_and_gold(manifest_path)
@@ -590,13 +686,59 @@ def _run_canary(
     return artifact
 
 
-def score_directory(output_dir: Path, stage: str) -> dict[str, Any]:
-    rows = [
-        load_json(path)["score"]
-        for path in sorted(output_dir.glob(f"{stage}-*-*-r*.json"))
-        if not path.name.endswith("-helper.json")
-    ]
-    return score_rows(rows, stage=stage)
+def score_directory(
+    output_dir: Path,
+    stage: str,
+    *,
+    manifest_path: Path,
+    freeze_path: Path,
+    repo_root: Path,
+    expected_digest: str = TRUSTED_FACTORIAL_FREEZE_DIGEST,
+) -> dict[str, Any]:
+    freeze_status = verify_freeze(
+        manifest_path, repo_root, freeze_path, expected_digest=expected_digest)
+    if freeze_status["status"] != "PASS":
+        raise DesignError(f"frozen surface is stale: {freeze_status['failures']}")
+    manifest = load_manifest(manifest_path)
+    cases, gold = load_cases_and_gold(manifest_path)
+    if stage == "screen":
+        case_ids = manifest["splits"]["development"]
+        arms = ("S_STATIC", "S_DYNAMIC")
+        replicates = (1,)
+    else:
+        screen = score_directory(
+            output_dir, "screen", manifest_path=manifest_path,
+            freeze_path=freeze_path, repo_root=repo_root,
+            expected_digest=expected_digest)
+        decision = screen["screen_gate"]["decision"]
+        arms = ARMS if decision == "FULL_2X2" else ("S_STATIC", "R_STATIC")
+        case_ids = manifest["splits"]["held_out"]
+        replicates = (1, 2, 3)
+    expected_paths = {
+        output_dir / f"{stage}-{case_id}-{arm}-r{replicate}.json"
+        for replicate in replicates for case_id in case_ids for arm in arms
+    }
+    actual_paths = set(output_dir.glob(f"{stage}-*-*-r*.json"))
+    if actual_paths != expected_paths:
+        raise DesignError(f"{stage} artifact matrix is incomplete or contains extras")
+    rows = []
+    for replicate in replicates:
+        for case_id in case_ids:
+            helper = None
+            if any(arm.startswith("R_") for arm in arms):
+                helper_path = output_dir / f"{stage}-{case_id}-r{replicate}-helper.json"
+                helper = load_json(helper_path)
+            for arm in arms:
+                path = output_dir / f"{stage}-{case_id}-{arm}-r{replicate}.json"
+                rows.append(_validated_run_score(
+                    path, case=cases[case_id], gold=gold[case_id], arm=arm,
+                    replicate=replicate,
+                    helper=helper if arm.startswith("R_") else None))
+    summary = score_rows(rows, stage=stage)
+    summary["freeze_digest"] = freeze_status["freeze_digest"]
+    if load_json(output_dir / f"{stage}-summary.json") != summary:
+        raise DesignError(f"{stage} summary does not match validated cell artifacts")
+    return summary
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -627,16 +769,25 @@ def main(argv: list[str] | None = None) -> int:
     score = sub.add_parser("score")
     score.add_argument("--output-dir", type=Path, required=True)
     score.add_argument("--stage", choices=("screen", "confirm"), required=True)
+    score.add_argument("--manifest", type=Path, required=True)
+    score.add_argument("--freeze", type=Path, required=True)
     args = parser.parse_args(argv)
     repo_root = Path(__file__).resolve().parents[1]
 
     try:
+        if (
+            args.command in {"canary", "screen", "confirm", "score"}
+            or (args.command == "freeze" and args.verify)
+        ):
+            assert_trusted_pin_provenance(repo_root)
         if args.command == "qualify":
             result = qualify_existing_set(
                 args.confirmatory_dir, repo_root, args.results_dir)
         elif args.command == "freeze":
             if args.verify:
-                result = verify_freeze(args.manifest, repo_root, args.output)
+                result = verify_freeze(
+                    args.manifest, repo_root, args.output,
+                    expected_digest=TRUSTED_FACTORIAL_FREEZE_DIGEST)
             else:
                 result = build_freeze(args.manifest, repo_root)
                 _write_new(args.output, result)
@@ -658,7 +809,9 @@ def main(argv: list[str] | None = None) -> int:
                 repo_root=repo_root,
             )
         else:
-            result = score_directory(args.output_dir, args.stage)
+            result = score_directory(
+                args.output_dir, args.stage, manifest_path=args.manifest,
+                freeze_path=args.freeze, repo_root=repo_root)
     except (DesignError, ProviderError, ContractError, OSError, ValueError) as exc:
         print(json.dumps({"status": "FAIL", "error": str(exc)}, ensure_ascii=False))
         return 1

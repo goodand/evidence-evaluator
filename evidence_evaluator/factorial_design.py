@@ -181,7 +181,11 @@ def build_freeze(manifest_path: Path, repo_root: Path) -> dict[str, Any]:
 
 
 def verify_freeze(
-    manifest_path: Path, repo_root: Path, freeze_path: Path
+    manifest_path: Path,
+    repo_root: Path,
+    freeze_path: Path,
+    *,
+    expected_digest: str | None = None,
 ) -> dict[str, Any]:
     expected = load_json(freeze_path)
     actual = build_freeze(manifest_path, repo_root)
@@ -194,6 +198,8 @@ def verify_freeze(
         failures.append("freeze receipt self-digest mismatch")
     if expected != actual:
         failures.append("factorial inputs or harness surface drifted")
+    if expected_digest is not None and expected.get("freeze_digest") != expected_digest:
+        failures.append("freeze receipt differs from the git-tracked trusted pin")
     return {
         "status": "PASS" if not failures else "FAIL",
         "freeze_digest": expected.get("freeze_digest"),

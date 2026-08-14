@@ -18,7 +18,7 @@
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
-python3 -m pytest tests/ -q                        # 현재 기대: 104 passed
+python3 -m pytest tests/ -q                        # 현재 기대: 110 passed
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
 

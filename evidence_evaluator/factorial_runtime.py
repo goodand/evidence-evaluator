@@ -112,6 +112,8 @@ class FactorialHostState:
         before: list[str],
         *,
         query: str | None = None,
+        trace_argument: str = "",
+        result_paths: list[str] | None = None,
         read_range: dict[str, Any] | None = None,
         accepted: bool = True,
         reject_reason: str | None = None,
@@ -120,6 +122,8 @@ class FactorialHostState:
             "i": len(self.actions),
             "action": action,
             "query": query,
+            "trace_argument": trace_argument,
+            "result_paths": list(result_paths or []),
             "candidates_before": before,
             "candidates_after": list(self.candidates),
             "read_range": read_range,
@@ -268,7 +272,9 @@ class FactorialHostState:
                     if first_search:
                         self.guard.first_search_paths = set(visible)
                     self._retrieval_actions += 1
-                    self._record("reformulate_query", before, query=normalized)
+                    self._record(
+                        "reformulate_query", before, query=normalized,
+                        trace_argument=normalized, result_paths=visible)
                     self._advance_static()
                     return {
                         "ok": True,
@@ -293,14 +299,16 @@ class FactorialHostState:
                                 discovered.append(candidate)
                     self.guard.observe("expand_candidates", None, None)
                     self._retrieval_actions += 1
-                    self._record("expand_candidates", before)
+                    shown = discovered[:MODEL_CANDIDATE_VIEW_K]
+                    self._record(
+                        "expand_candidates", before, result_paths=shown)
                     self._advance_static()
                     if self.static:
                         self._plan_after_expand()
                     return {
                         "ok": True,
                         "action": "expand_candidates",
-                        "result_paths": discovered[:MODEL_CANDIDATE_VIEW_K],
+                        "result_paths": shown,
                         "result_path_count": len(discovered),
                         **self._candidate_summary(),
                         "static_next": self._static_next_payload(),
@@ -323,7 +331,10 @@ class FactorialHostState:
                             discovered.append(candidate)
                     self.guard.observe("follow_link", None, requested_path)
                     self._retrieval_actions += 1
-                    self._record("follow_link", before)
+                    shown = discovered[:MODEL_CANDIDATE_VIEW_K]
+                    self._record(
+                        "follow_link", before, trace_argument=requested_path,
+                        result_paths=shown)
                     self._advance_static()
                     if self.static:
                         self._plan_after_follow(discovered)
@@ -331,7 +342,7 @@ class FactorialHostState:
                         "ok": True,
                         "action": "follow_link",
                         "from_path": requested_path,
-                        "result_paths": discovered[:MODEL_CANDIDATE_VIEW_K],
+                        "result_paths": shown,
                         "result_path_count": len(discovered),
                         **self._candidate_summary(),
                         "static_next": self._static_next_payload(),
@@ -359,7 +370,10 @@ class FactorialHostState:
                     self.reads.append(actual)
                     self.guard.observe("read_candidate", None, actual["path"])
                     self._retrieval_actions += 1
-                    self._record("read_candidate", before, read_range=actual)
+                    self._record(
+                        "read_candidate", before,
+                        trace_argument=actual["path"],
+                        result_paths=[actual["path"]], read_range=actual)
                     self._advance_static()
                     numbered = "\n".join(
                         f"{number}: {line}" for number, line in enumerate(
