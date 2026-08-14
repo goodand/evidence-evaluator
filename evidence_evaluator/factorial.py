@@ -28,12 +28,14 @@ from .factorial_design import (
     RUN_VERSION,
     DesignError,
     build_freeze,
+    canonical_digest,
     load_cases_and_gold,
     load_json,
     load_manifest,
     qualify_existing_set,
     resolve_manifest_path,
     score_rows,
+    sha256_file,
     verify_freeze,
 )
 from .factorial_runtime import (
@@ -44,6 +46,7 @@ from .factorial_runtime import (
 )
 from .factorial_pin import (
     TRUSTED_FACTORIAL_FREEZE_DIGEST,
+    TRUSTED_SCREEN_RECEIPT_DIGEST,
     assert_trusted_pin_provenance,
 )
 from .providers import ProviderError, run_codex_mcp_cli, validate_against_schema
@@ -55,6 +58,7 @@ SUBAGENT_SCHEMA_NAME = "handoff-factorial-subagent.schema.json"
 ANSWER_SCHEMA_NAME = "handoff-factorial-output.schema.json"
 
 Provider = Callable[..., dict[str, Any]]
+STAGE_RECEIPT_VERSION = "handoff-factorial-stage-receipt-v1"
 
 
 def _codex_usage_summary(raw: str) -> dict[str, int]:
@@ -85,6 +89,34 @@ def _write_new(path: Path, value: dict[str, Any]) -> None:
         raise DesignError(f"refusing to overwrite append-only artifact {path}")
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8")
+
+
+def _build_stage_receipt(output_dir: Path, stage: str) -> dict[str, Any]:
+    files = {
+        path.name: sha256_file(path)
+        for path in sorted(output_dir.glob(f"{stage}-*.json"))
+        if path.name != f"{stage}-receipt.json"
+    }
+    unsigned = {
+        "contract_version": STAGE_RECEIPT_VERSION,
+        "stage": stage,
+        "files": files,
+    }
+    return {**unsigned, "receipt_digest": canonical_digest(unsigned)}
+
+
+def _verify_stage_receipt(
+    output_dir: Path, stage: str, expected_digest: str | None
+) -> dict[str, Any]:
+    if expected_digest is None:
+        raise DesignError(
+            f"{stage} receipt has not been authorized in factorial_pin.py")
+    receipt_path = output_dir / f"{stage}-receipt.json"
+    receipt = load_json(receipt_path)
+    actual = _build_stage_receipt(output_dir, stage)
+    if receipt != actual or receipt.get("receipt_digest") != expected_digest:
+        raise DesignError(f"{stage} stage receipt is stale or not trusted")
+    return receipt
 
 
 def _schema(repo_root: Path, name: str) -> tuple[Path, dict[str, Any]]:
@@ -551,6 +583,7 @@ def _run_stage(
     repo_root: Path,
     provider: Provider = run_codex_mcp_cli,
     expected_digest: str = TRUSTED_FACTORIAL_FREEZE_DIGEST,
+    expected_screen_receipt_digest: str | None = TRUSTED_SCREEN_RECEIPT_DIGEST,
 ) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
     freeze_status = verify_freeze(
@@ -566,6 +599,8 @@ def _run_stage(
         arms = ("S_STATIC", "S_DYNAMIC")
         replicates = (1,)
     elif stage == "confirm":
+        _verify_stage_receipt(
+            output_dir, "screen", expected_screen_receipt_digest)
         screen_path = output_dir / "screen-summary.json"
         screen = load_json(screen_path)
         expected_screen_paths = {
@@ -632,7 +667,9 @@ def _run_stage(
     summary = score_rows(rows, stage=stage)
     summary["freeze_digest"] = freeze_status["freeze_digest"]
     _write_new(output_dir / f"{stage}-summary.json", summary)
-    return summary
+    receipt = _build_stage_receipt(output_dir, stage)
+    _write_new(output_dir / f"{stage}-receipt.json", receipt)
+    return {**summary, "stage_receipt_digest": receipt["receipt_digest"]}
 
 
 def _run_canary(
@@ -694,6 +731,7 @@ def score_directory(
     freeze_path: Path,
     repo_root: Path,
     expected_digest: str = TRUSTED_FACTORIAL_FREEZE_DIGEST,
+    expected_screen_receipt_digest: str | None = TRUSTED_SCREEN_RECEIPT_DIGEST,
 ) -> dict[str, Any]:
     freeze_status = verify_freeze(
         manifest_path, repo_root, freeze_path, expected_digest=expected_digest)
@@ -702,6 +740,8 @@ def score_directory(
     manifest = load_manifest(manifest_path)
     cases, gold = load_cases_and_gold(manifest_path)
     if stage == "screen":
+        _verify_stage_receipt(
+            output_dir, "screen", expected_screen_receipt_digest)
         case_ids = manifest["splits"]["development"]
         arms = ("S_STATIC", "S_DYNAMIC")
         replicates = (1,)
@@ -709,7 +749,8 @@ def score_directory(
         screen = score_directory(
             output_dir, "screen", manifest_path=manifest_path,
             freeze_path=freeze_path, repo_root=repo_root,
-            expected_digest=expected_digest)
+            expected_digest=expected_digest,
+            expected_screen_receipt_digest=expected_screen_receipt_digest)
         decision = screen["screen_gate"]["decision"]
         arms = ARMS if decision == "FULL_2X2" else ("S_STATIC", "R_STATIC")
         case_ids = manifest["splits"]["held_out"]

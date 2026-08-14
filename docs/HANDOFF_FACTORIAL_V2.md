@@ -93,6 +93,12 @@ python3 -m evidence_evaluator.factorial confirm \
 
 Every run is append-only. An existing helper, cell, or summary artifact causes the command to fail rather than overwrite it.
 
+The screen additionally writes `screen-receipt.json`, which hashes every
+screen cell and its summary. Before `confirm` or public `score` verification,
+copy its `receipt_digest` into `TRUSTED_SCREEN_RECEIPT_DIGEST` in
+`evidence_evaluator/factorial_pin.py` and commit that pin. Until this separate
+authorization commit exists, confirm fails closed.
+
 ## Outcomes
 
 The primary outcome is grounded continuation: valid runtime, all critical paths read, exact authority read, all claim ranges exposed, and correct state, next action, and stop condition. Positive-case recall and no-gold abstention are reported separately. Invalid runs remain in the intention-to-run denominator. Calls, retrieval actions, elapsed time, failure codes, and paired arm deltas are secondary outcomes.

@@ -12,6 +12,10 @@ TRUSTED_FACTORIAL_FREEZE_DIGEST = (
     "291c05be61c05a77c727c959bda95ef587a1ba306f92403668d7c7a72eb05e1d"
 )
 
+# Set this to the screen receipt digest and commit it after the 16-cell screen.
+# Until then, confirm and public score verification are intentionally blocked.
+TRUSTED_SCREEN_RECEIPT_DIGEST: str | None = None
+
 
 def assert_trusted_pin_provenance(repo_root: Path) -> None:
     """Require the working pin bytes to match the current Git commit."""

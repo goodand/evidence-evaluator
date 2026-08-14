@@ -16,7 +16,9 @@ from evidence_evaluator.contract import (
     validate_subagent_output,
 )
 from evidence_evaluator.factorial import (
+    _build_stage_receipt,
     _run_stage,
+    main,
     run_cell,
     run_helper,
     score_directory,
@@ -582,16 +584,20 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
     assert summary["n_runs"] == 16
     assert len(list(output.glob("screen-DEV-*-S_*-r1.json"))) == 16
     assert (output / "screen-summary.json").is_file()
+    screen_receipt_digest = summary["stage_receipt_digest"]
     assert score_directory(
         output, "screen", manifest_path=manifest_path,
         freeze_path=freeze_path, repo_root=repo,
-        expected_digest=receipt["freeze_digest"])["n_runs"] == 16
+        expected_digest=receipt["freeze_digest"],
+        expected_screen_receipt_digest=screen_receipt_digest,
+    )["n_runs"] == 16
 
     summary_path = output / "screen-summary.json"
+    original_summary = summary_path.read_bytes()
     forged = json.loads(summary_path.read_text())
     forged["n_runs"] = 1
     summary_path.write_text(json.dumps(forged), encoding="utf-8")
-    with pytest.raises(DesignError, match="does not match"):
+    with pytest.raises(DesignError, match="receipt is stale or not trusted"):
         _run_stage(
             stage="confirm",
             manifest_path=manifest_path,
@@ -600,9 +606,10 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
             repo_root=repo,
             provider=lambda *args, **kwargs: pytest.fail("provider must not run"),
             expected_digest=receipt["freeze_digest"],
+            expected_screen_receipt_digest=screen_receipt_digest,
         )
 
-    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    summary_path.write_bytes(original_summary)
     cell_path = output / "screen-DEV-01-S_DYNAMIC-r1.json"
     cell = json.loads(cell_path.read_text(encoding="utf-8"))
     cell["score"]["full_hard_gate"] = not cell["score"]["full_hard_gate"]
@@ -614,7 +621,10 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
     forged_summary = score_rows(rows, stage="screen")
     forged_summary["freeze_digest"] = receipt["freeze_digest"]
     summary_path.write_text(json.dumps(forged_summary), encoding="utf-8")
-    with pytest.raises(DesignError, match="score does not match trace"):
+    forged_receipt = _build_stage_receipt(output, "screen")
+    (output / "screen-receipt.json").write_text(
+        json.dumps(forged_receipt), encoding="utf-8")
+    with pytest.raises(DesignError, match="receipt is stale or not trusted"):
         _run_stage(
             stage="confirm",
             manifest_path=manifest_path,
@@ -623,9 +633,25 @@ def test_screen_stage_runs_exact_matrix_and_writes_summary(tmp_path: Path) -> No
             repo_root=repo,
             provider=lambda *args, **kwargs: pytest.fail("provider must not run"),
             expected_digest=receipt["freeze_digest"],
+            expected_screen_receipt_digest=screen_receipt_digest,
         )
-    with pytest.raises(DesignError, match="score does not match trace"):
+    with pytest.raises(DesignError, match="receipt is stale or not trusted"):
         score_directory(
             output, "screen", manifest_path=manifest_path,
             freeze_path=freeze_path, repo_root=repo,
-            expected_digest=receipt["freeze_digest"])
+            expected_digest=receipt["freeze_digest"],
+            expected_screen_receipt_digest=screen_receipt_digest)
+
+
+def test_freeze_cli_refuses_to_overwrite_existing_artifact(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _write_design(tmp_path / "design")
+    output = tmp_path / "freeze.json"
+    original = b'{"sentinel":"keep"}\n'
+    output.write_bytes(original)
+
+    assert main([
+        "freeze", "--manifest", str(manifest_path), "--output", str(output),
+    ]) == 1
+    assert output.read_bytes() == original
