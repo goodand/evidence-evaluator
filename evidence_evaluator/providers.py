@@ -129,7 +129,9 @@ def _codex_event_summary(
         names = [name for name in names if isinstance(name, str)]
         if len(names) != 1 or names[0] not in allowed_mcp_tools:
             forbidden.append(f"{item_type}:{names or 'unnamed'}")
-        else:
+        elif event.get("type") in {None, "item.completed"}:
+            # Codex emits started and completed envelopes for one MCP call.
+            # Count only the completion; the server audit also records once.
             mcp_tools.extend(names)
     if forbidden:
         raise ProviderError(

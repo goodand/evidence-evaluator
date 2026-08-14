@@ -95,8 +95,12 @@ def _records() -> list[dict]:
     ]
 
 
-def _meta() -> dict:
-    return {"tool_event_summary": {"forbidden": []}}
+def _meta(records: list[dict] | None = None) -> dict:
+    records = _records() if records is None else records
+    return {"tool_event_summary": {
+        "forbidden": [],
+        "mcp_tools": [record["tool"] for record in records],
+    }}
 
 
 def test_canary_accepts_only_observed_search_reads_and_supported_claims() -> None:
@@ -182,6 +186,25 @@ def test_canary_rejects_native_or_unrelated_tool_events() -> None:
         _codex_event_summary(unrelated, frozenset({"vault_search"}))
 
 
+def test_codex_event_summary_counts_one_completed_event_per_call() -> None:
+    raw = "\n".join(json.dumps({
+        "type": phase,
+        "item": {"type": "mcp_tool_call", "tool": "vault_search"},
+    }) for phase in ("item.started", "item.completed"))
+    summary = _codex_event_summary(raw, frozenset({"vault_search"}))
+    assert summary["mcp_tools"] == ["vault_search"]
+
+
+def test_canary_rejects_provider_and_server_trace_mismatch() -> None:
+    meta = _meta()
+    meta["tool_event_summary"]["mcp_tools"].append("vault_read")
+    result = assess_canary(
+        _case(), _gold(), _payload(), _records(), meta, max_calls=6
+    )
+    assert result["runtime"]["provider_trace_matches_audit"] is False
+    assert result["accepted"] is False
+
+
 def test_codex_command_exposes_only_the_requested_mcp(tmp_path: Path) -> None:
     server = CodexMcpServerSpec(
         name="evidence_vault",
@@ -215,6 +238,24 @@ def test_mcp_call_budget_fails_closed() -> None:
         audit.begin("vault_read", {})
 
 
+def test_mcp_search_audit_preserves_fallback_provenance(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    audit = McpAuditLog(path)
+    audit.append("vault_search", {"query": "q"}, result={
+        "artifact_digest": "a" * 64,
+        "retrieved_paths": [HANDOFF],
+        "status": "review_required",
+        "review_required": True,
+        "fallback_used": "filesystem",
+        "exhaustive": False,
+        "terminal_reason": "turn-budget-exhausted",
+    })
+    result = json.loads(path.read_text())["result"]
+    assert result["fallback_used"] == "filesystem"
+    assert result["exhaustive"] is False
+    assert result["terminal_reason"] == "turn-budget-exhausted"
+
+
 def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
 
@@ -242,7 +283,7 @@ def test_run_canary_scripted_e2e_preserves_audit_and_provenance(tmp_path: Path) 
         return {
             "payload": _payload(),
             "raw": "scripted raw",
-            "provider_meta": {"tool_event_summary": {"forbidden": []}},
+            "provider_meta": _meta(),
         }
 
     result = run_canary(

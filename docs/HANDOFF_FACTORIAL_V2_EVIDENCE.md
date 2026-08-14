@@ -11,9 +11,9 @@ State code: `READY_FOR_DEVELOPMENT_SCREEN`.
 Transport qualification is 6/6 accepted with zero invalid runs. The current
 factorial freeze digest is
 `dab2ebf9cbee88daad8578fa789bce49d998f0611c92f6f1e5d96fba25b8d9fa`.
-The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the full hard gate,
-critical-path recall 1.0, exact authority hit, and state, next-action, and stop
-reconstruction. The 16-cell development screen has not run.
+The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the implemented
+structured hard gate, critical-path recall 1.0, exact authority hit, and exact
+state, next-action, and stop codes. The 16-cell development screen has not run.
 
 ## Authorized continuation
 
@@ -36,6 +36,8 @@ and `screen-receipt.json` as append-only artifacts.
 ## Evidence boundary
 
 The canary establishes live provider-to-MCP plumbing and one development
-reconstruction only. The ignored `private_eval` corpus and `results` artifacts
-must not be published. This note does not authorize mutation of frozen cases,
-gold, harness code, or the freeze receipt.
+reconstruction only. Its automatic citation check establishes range exposure,
+not semantic entailment; a detached low-context review separately checked the
+actual prose against those ranges. The ignored `private_eval` corpus and
+`results` artifacts must not be published. This note does not authorize
+mutation of frozen cases, gold, harness code, or the freeze receipt.

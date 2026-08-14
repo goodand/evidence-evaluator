@@ -94,10 +94,12 @@ class McpAuditLog:
 def _audit_result(tool: str, result: dict[str, Any]) -> dict[str, Any]:
     if tool == "vault_search":
         return {
-            "artifact_digest": result.get("artifact_digest"),
-            "retrieved_paths": result.get("retrieved_paths", []),
-            "status": result.get("status"),
-            "review_required": result.get("review_required"),
+            key: result.get(key)
+            for key in (
+                "artifact_digest", "retrieved_paths", "status",
+                "review_required", "fallback_used", "exhaustive",
+                "terminal_reason",
+            )
         }
     if tool == "vault_read":
         return {
