@@ -89,6 +89,33 @@ Artifact SHA-256:
 - result: `bf8c624affa61fde77e4b789b0a42e9502d19c611a127f93cc3f51cddbb007e3`
 - MCP audit: `10478bb7d3b7bbf57262eff42a052f2c2aa5be9da6f732e92fef50929fdf0a08`
 
+## Attempts 3 and 4 - Luna operational check
+
+Attempt 3 used `gpt-5.6-luna`. Retrieval and reconstruction were correct, but
+the runtime was rejected because the provider trace contained an initial
+failed `vault_search` call with a malformed `question` argument followed by a
+successful retry with `query`. The server audit correctly contained only the
+successful call, while the provider summary incorrectly mixed the failed call
+into its successful-call list.
+
+The runtime contract now keeps successful and failed provider calls separate.
+Successful calls must still exactly match the server audit, failed calls remain
+visible, and both consume the fixed call budget. Two regression tests cover a
+recovered provider failure and rejection after failed attempts exceed budget.
+Attempt 3 remains an immutable failed historical artifact.
+
+Attempt 4 reran the same case with `gpt-5.6-luna`. It used one search and three
+reads without a failed provider call. Runtime, Retrieval, and Reconstruction
+all passed. It recovered the current state, authorized next action, and all
+three stop codes from the handoff and current-state authority.
+
+Artifact SHA-256:
+
+- attempt 3 result: `e6bf63b27b253fbf0332e5d2eca25e62691fa536568dbbd6240c6c1c0b54d7bd`
+- attempt 3 MCP audit: `93c28e4f1a530c03569770ea6c487344f5916a9f9e04ba3db3fd4407ba64f5ab`
+- attempt 4 result: `0048d93db5052b6712e98f82051d875a7a5e3e469538d7d61835a99db198df18`
+- attempt 4 MCP audit: `f21a3a45f224fc185dd5805c95781bec334bd7f0329c4347b135e7a921f81553`
+
 ## Verdict and limits
 
 This establishes that one actual experiment handoff can be found and that a
@@ -97,10 +124,11 @@ previous readiness state. It does not establish static/dynamic arm effects,
 subagent effects, vault-wide recall, backlink necessity, or automated semantic
 entailment.
 
-Current local verification is 108 passed and 6 skipped. The six skips are
-`AF_UNIX` capability blocks in this managed lane, not silent passes. The next
-experiment action remains the six-case transport requalification; the
-development screen is blocked.
+Current local verification is 116 passed in the present host-capable lane.
+Managed lanes that block `AF_UNIX` must still report the affected checks as
+BLOCKED rather than silently treating skips as passes. The next experiment
+action remains the six-case transport requalification; the development screen
+is blocked.
 
 ## Subject model policy
 
@@ -108,3 +136,5 @@ Attempts 1 and 2 used `gpt-5.6-sol` and remain historical artifacts. Future
 low-complexity operational handoff subjects use `gpt-5.6-luna`; `sol` is
 unnecessarily large for this three-call recovery task. This policy does not
 change the model frozen in the separate factorial performance manifest.
+Attempt 4 establishes that Luna can complete this one operational case; it
+does not establish comparative model performance or multi-case reliability.
