@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 
 TRUSTED_FACTORIAL_FREEZE_DIGEST = (
-    "dab2ebf9cbee88daad8578fa789bce49d998f0611c92f6f1e5d96fba25b8d9fa"
+    "d662fc865f2cccbddbc574206f7f7ea69172e6e03229f6f7dbe7f03943c4f436"
 )
 
 # Set this to the screen receipt digest and commit it after the 16-cell screen.

@@ -10,7 +10,7 @@ State code: `READY_FOR_DEVELOPMENT_SCREEN`.
 
 Transport qualification is 6/6 accepted with zero invalid runs. The current
 factorial freeze digest is
-`dab2ebf9cbee88daad8578fa789bce49d998f0611c92f6f1e5d96fba25b8d9fa`.
+`d662fc865f2cccbddbc574206f7f7ea69172e6e03229f6f7dbe7f03943c4f436`.
 The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the implemented
 structured hard gate, critical-path recall 1.0, exact authority hit, and exact
 state, next-action, and stop codes. The 16-cell development screen has not run.
