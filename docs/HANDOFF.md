@@ -302,3 +302,33 @@ PY
 | 10 | 실행 불가한 검증은 BLOCKED로 기록 | **PASS** |
 
 **3번만 남았다.** MCP 등록 성공은 검색 성능 조건 3의 통과를 의미하지 않는다.
+
+## 12. Codex 전역 등록과 실제 호출 검증 (2026-08-14)
+
+`worktree-mcp-v01-backlinks`의 이력은 `main`에 병합됐고, Codex 사용자 전역 MCP는
+다음 정본 launcher를 가리킨다:
+
+```text
+/Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/scripts/run_obsidian_vault_mcp.sh
+```
+
+새 `codex exec --ephemeral` 세션에서 shell이나 기존 `vault-retrieval` 대신
+`evidence-vault-mcp`만 사용하도록 한 smoke 결과:
+
+| 단계 | 결과 |
+|---|---|
+| `vault_search("Obsidian CLI", output_k=3)` | 호출 성공, 3개 경로, `status=review_required`, filesystem fallback |
+| 첫 canonical 경로 `vault_read` | 호출 성공, 1~10행 bounded read |
+| 같은 경로 `vault_backlinks(limit=3)` | 호출 성공, 3개 backlink, limit 유지 |
+
+이 검증은 Codex 등록과 search→read→backlinks 배관을 확립한다. 검색 품질 완료를
+확립하지는 않는다. 두 문제가 그대로 남았다:
+
+1. 통합 전 `evidence-evaluator-obsidian-wt` replica가 현재 `main`보다 먼저
+   선택됐다.
+2. `turns`, `graph_evidence`, 반복 warning을 포함한 search 도구 응답이 커서 smoke
+   세션 입력이 약 28만 token까지 증가했다. caller-visible 결과는 `output_k`로
+   제한되지만 진단 payload는 아직 실사용에 충분히 작지 않다.
+
+다음 검색 개선은 새 아키텍처가 아니라 authority profile과 MCP compact projection의
+최소 수정으로 수행한다. 현재 smoke artifact는 등록 성공 근거로만 사용한다.
