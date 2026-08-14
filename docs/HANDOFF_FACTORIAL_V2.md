@@ -17,7 +17,9 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
 
 ## Status
 
-- Transport qualification: **PASS**, 6/6 accepted, 0 invalid runs.
+- Historical transport qualification: 6/6 accepted, 0 invalid runs under the
+  prior harness surface. It is now **stale** after provenance hardening and is
+  not current authorization.
 - Qualification freeze: `5187e0e9442b70131eb8bdc440f5d6990076d44198912ae721946ef3afe3c255`.
 - Factorial set: **frozen**, 16 independently drafted synthetic cases.
 - Factorial freeze: `d662fc865f2cccbddbc574206f7f7ea69172e6e03229f6f7dbe7f03943c4f436`.
@@ -25,7 +27,8 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
   structured hard gate was true,
   critical-path recall 1.0, exact authority hit, 0 invalid runs, and no guard
   rejection. This single cell establishes plumbing only.
-- Development screen: **not run**.
+- Current readiness: **transport requalification required**.
+- Development screen: **not run and blocked until requalification passes**.
 - Performance claims: **none yet**.
 
 The private corpus, cases, gold, curator draft, structural qualification, and freeze receipt are under ignored `private_eval/handoff-factorial-v2/`. They must not be pushed.
