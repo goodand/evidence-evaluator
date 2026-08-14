@@ -14,7 +14,9 @@ TRUSTED_FACTORIAL_FREEZE_DIGEST = (
 
 # Set this to the screen receipt digest and commit it after the 16-cell screen.
 # Until then, confirm and public score verification are intentionally blocked.
-TRUSTED_SCREEN_RECEIPT_DIGEST: str | None = None
+TRUSTED_SCREEN_RECEIPT_DIGEST: str | None = (
+    "40027887b71d7bc23b20bb7b397233c4a9c492440f6ee3a2c9dc934b995f6568"
+)
 
 
 def assert_trusted_pin_provenance(repo_root: Path) -> None:
