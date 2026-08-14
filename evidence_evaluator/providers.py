@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -90,7 +91,10 @@ def sanitize_provider_raw(raw: str) -> str:
     return "\n".join(out)
 
 
-def _codex_event_summary(raw: str) -> dict[str, Any]:
+def _codex_event_summary(
+    raw: str,
+    allowed_mcp_tools: frozenset[str] = frozenset({"handoff_action"}),
+) -> dict[str, Any]:
     """Reject any native tool event except the one host-owned MCP action tool.
 
     The checker is deliberately fail-closed for a reported tool event.
@@ -123,7 +127,7 @@ def _codex_event_summary(raw: str) -> dict[str, Any]:
             continue
         names = [item.get(key) for key in ("tool", "tool_name", "name")]
         names = [name for name in names if isinstance(name, str)]
-        if names != ["handoff_action"]:
+        if len(names) != 1 or names[0] not in allowed_mcp_tools:
             forbidden.append(f"{item_type}:{names or 'unnamed'}")
         else:
             mcp_tools.extend(names)
@@ -425,23 +429,46 @@ def run_claude_cli(subject: Path, socket_path: Path, prompt: str, schema_name: s
 # --------------------------------------------------------------------------
 # Codex CLI with exactly one stdio MCP action bridge
 # --------------------------------------------------------------------------
-def codex_mcp_command(codex: str, subject: Path, socket_path: Path,
-                      schema_path: Path, output_path: Path,
-                      config: dict[str, Any], *,
-                      bridge_script: Path | None = None) -> list[str]:
-    """Build a Codex command where OAuth is parent-only and tools are closed.
+@dataclass(frozen=True)
+class CodexMcpServerSpec:
+    """One model-visible stdio MCP server and its complete tool allowlist."""
 
-    `bridge_script` defaults to `mcp_bridge.py` shipped next to this module
-    (see `subject_tool.request` / `mcp_bridge.py`); pass your own if you
-    have a different action surface.
-    """
-    server = bridge_script or (Path(__file__).resolve().parent / "mcp_bridge.py")
+    name: str
+    command: str
+    args: tuple[str, ...]
+    env: dict[str, str]
+    enabled_tools: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", self.name):
+            raise ProviderError(f"invalid MCP server name: {self.name!r}")
+        if not self.command or not self.enabled_tools:
+            raise ProviderError("MCP command and enabled_tools must not be empty")
+
+
+def codex_external_mcp_command(
+    codex: str,
+    subject: Path,
+    schema_path: Path,
+    output_path: Path,
+    config: dict[str, Any],
+    server: CodexMcpServerSpec,
+) -> list[str]:
+    """Build a Codex command exposing only one allowlisted stdio MCP server."""
+    prefix = f"mcp_servers.{server.name}"
+    invalid_env_keys = [
+        key for key in server.env if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+    ]
+    if invalid_env_keys:
+        raise ProviderError(f"invalid MCP environment key(s): {invalid_env_keys}")
+    env_table = "{ " + ", ".join(
+        f"{key} = {json.dumps(value)}" for key, value in server.env.items()
+    ) + " }"
     overrides = (
-        f"mcp_servers.handoff.command={json.dumps(sys.executable)}",
-        f"mcp_servers.handoff.args={json.dumps([str(server)])}",
-        "mcp_servers.handoff.env={ HANDOFF_LIVE_TOOL_SOCKET = " +
-        json.dumps(str(socket_path)) + " }",
-        'mcp_servers.handoff.enabled_tools=["handoff_action"]',
+        f"{prefix}.command={json.dumps(server.command)}",
+        f"{prefix}.args={json.dumps(list(server.args))}",
+        f"{prefix}.env={env_table}",
+        f"{prefix}.enabled_tools={json.dumps(list(server.enabled_tools))}",
     )
     command = [
         codex, "exec", "--ephemeral", "--skip-git-repo-check",
@@ -462,6 +489,104 @@ def codex_mcp_command(codex: str, subject: Path, socket_path: Path,
         "--output-schema", str(schema_path), "--output-last-message", str(output_path),
         "--json", "-",
     ]
+
+
+def codex_mcp_command(codex: str, subject: Path, socket_path: Path,
+                      schema_path: Path, output_path: Path,
+                      config: dict[str, Any], *,
+                      bridge_script: Path | None = None) -> list[str]:
+    """Build a Codex command where OAuth is parent-only and tools are closed.
+
+    `bridge_script` defaults to `mcp_bridge.py` shipped next to this module
+    (see `subject_tool.request` / `mcp_bridge.py`); pass your own if you
+    have a different action surface.
+    """
+    server = bridge_script or (Path(__file__).resolve().parent / "mcp_bridge.py")
+    return codex_external_mcp_command(
+        codex,
+        subject,
+        schema_path,
+        output_path,
+        config,
+        CodexMcpServerSpec(
+            name="handoff",
+            command=sys.executable,
+            args=(str(server),),
+            env={"HANDOFF_LIVE_TOOL_SOCKET": str(socket_path)},
+            enabled_tools=("handoff_action",),
+        ),
+    )
+
+
+def run_codex_external_mcp_cli(
+    subject: Path,
+    prompt: str,
+    schema_path: Path,
+    config: dict[str, Any],
+    *,
+    server: CodexMcpServerSpec,
+    run_name: str,
+) -> dict[str, Any]:
+    """Run a fresh Codex subject with only ``server.enabled_tools`` visible."""
+    codex = shutil.which("codex")
+    if not codex:
+        raise ProviderError("Codex CLI is unavailable")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    run_dir = subject / "run"
+    run_dir.mkdir(exist_ok=True)
+    output_path = run_dir / f"{run_name}.json"
+    raw_path = run_dir / f"{run_name}.jsonl"
+    command = codex_external_mcp_command(
+        codex, subject, schema_path, output_path, config, server
+    )
+    started = time.perf_counter()
+    try:
+        proc = subprocess.run(
+            command,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            env=dict(os.environ),
+            cwd=subject,
+            timeout=config["timeout_seconds"],
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raw = sanitize_provider_raw(
+            (exc.stdout or "") + "\n-- STDERR --\n" + (exc.stderr or "")
+        )
+        raw_path.write_text(raw, encoding="utf-8")
+        raise ProviderError(
+            f"Codex MCP CLI timed out after {config['timeout_seconds']} seconds",
+            raw=raw,
+        ) from exc
+    raw = sanitize_provider_raw(proc.stdout + "\n-- STDERR --\n" + proc.stderr)
+    raw_path.write_text(raw, encoding="utf-8")
+    allowed = frozenset(server.enabled_tools)
+    event_summary = _codex_event_summary(raw, allowed)
+    if proc.returncode != 0:
+        tail = ("stdout=" + proc.stdout[-1200:] + " stderr=" + proc.stderr[-1200:]).strip()
+        raise ProviderError(f"Codex MCP CLI exited {proc.returncode}: {tail}", raw=raw)
+    if not output_path.is_file():
+        raise ProviderError("Codex MCP CLI did not produce a final JSON response", raw=raw)
+    try:
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+        validate_against_schema(payload, schema)
+    except (json.JSONDecodeError, ProviderError) as exc:
+        raise ProviderError(f"Codex MCP final response is invalid: {exc}", raw=raw) from exc
+    return {
+        "payload": payload,
+        "raw": raw,
+        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        "provider_meta": {
+            "provider": "codex-external-mcp-cli",
+            "tool_policy": "single-stdio-mcp-allowlist-v1",
+            "auth_boundary": "codex-parent-oauth-only",
+            "server": server.name,
+            "enabled_tools": list(server.enabled_tools),
+            "tool_event_summary": event_summary,
+        },
+    }
 
 
 def run_codex_mcp_cli(subject: Path, socket_path: Path, prompt: str, schema_name: str,

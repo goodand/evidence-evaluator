@@ -95,6 +95,7 @@ async def _mcp_smoke(vault: Path) -> None:
         {
             "EVIDENCE_VAULT_ROOT": str(vault),
             "EVIDENCE_OBSIDIAN_ENABLED": "0",
+            "EVIDENCE_MCP_AUDIT_LOG": str(vault.parent / "mcp-audit.jsonl"),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
     )
@@ -134,6 +135,28 @@ async def _mcp_smoke(vault: Path) -> None:
                 "evidence-vault-search-v1"
             )
             assert "AUTHORITY.md" in result.structuredContent["retrieved_paths"]
+            assert result.structuredContent["projection"] == "compact-v1"
+            assert "candidate_pool" not in result.structuredContent
+            assert "turns" not in result.structuredContent
+
+            full = await session.call_tool(
+                "vault_search",
+                {
+                    "query": "needle entry",
+                    "output_k": 2,
+                    "candidate_pool_k": 4,
+                    "graph_seed_k": 2,
+                    "max_turns": 3,
+                    "include_diagnostics": True,
+                },
+            )
+            assert "candidate_pool" in full.structuredContent
+            assert "turns" in full.structuredContent
+
+            read = await session.call_tool(
+                "vault_read", {"path": "AUTHORITY.md", "line_count": 2}
+            )
+            assert read.isError is False
 
             blocked = await session.call_tool(
                 "vault_read", {"path": "hidden_gold/gold.md"}
@@ -144,6 +167,21 @@ async def _mcp_smoke(vault: Path) -> None:
             assert [str(item.uri) for item in resources.resources] == [
                 "vault://retrieval/policy"
             ]
+
+    records = [
+        json.loads(line)
+        for line in (vault.parent / "mcp-audit.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert [record["tool"] for record in records] == [
+        "vault_search", "vault_search", "vault_read", "vault_read"
+    ]
+    successful_read = records[2]
+    assert successful_read["result"]["canonical_path"] == "AUTHORITY.md"
+    assert len(successful_read["result"]["content_sha256"]) == 64
+    assert '"content":' not in json.dumps(records, ensure_ascii=False)
+    assert records[3]["outcome"] == "error"
 
 
 def test_stdio_mcp_uses_the_same_read_only_service(transport_vault: Path) -> None:

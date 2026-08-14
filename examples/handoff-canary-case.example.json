@@ -1,0 +1,6 @@
+{
+  "contract_version": "handoff-mcp-canary-case-v1",
+  "id": "EXAMPLE-01",
+  "project_id": "EXAMPLE-PROJECT",
+  "question": "For project EXAMPLE-PROJECT, recover the current state, next action, and stop conditions from the handoff and its authority source."
+}

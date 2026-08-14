@@ -91,6 +91,12 @@ Install it with `pip install 'evidence-evaluator[obsidian-mcp]'` when the
   walk already computes internally, bounded and canonicalized the same way
   as `vault_search`.
 
+`vault_search` returns the bounded `compact-v1` projection by default. Pass
+`include_diagnostics=true` only for retrieval development; it restores the
+full candidate pool and turn trace and can be very large. Set
+`EVIDENCE_MCP_AUDIT_LOG` to record content-free JSONL metadata for each call,
+and `EVIDENCE_MCP_MAX_CALLS` to enforce a per-process call budget.
+
 Every response carries `fallback_used`: `null` when the Obsidian CLI answered
 directly, or the name of the degraded source (currently `"filesystem"`) when
 the CLI was unavailable and the filesystem link graph carried the answer
@@ -120,6 +126,30 @@ with `codex mcp remove evidence-vault-mcp`.
 Claude Code can use the same launcher from a project-scope `.mcp.json`. Both
 clients must point to this main checkout, not a temporary `.claude/worktrees`
 path.
+
+### Zero-context handoff canary
+
+The one-case canary starts a fresh ephemeral Codex subject with user config,
+rules, native shell/file tools, and unrelated MCP servers disabled. The only
+model-visible tools are `vault_search`, `vault_read`, and `vault_backlinks`.
+Its supervisor log is then used to verify that every citation was covered by
+an actual bounded read. Runtime, Retrieval, and Reconstruction remain separate
+outcomes; the canary does not estimate workflow-arm effects or vault-wide
+recall.
+
+```bash
+python3 -m evidence_evaluator.handoff_canary \
+  --profile private_eval/handoff-mcp-canary-v1/profile.json \
+  --case private_eval/handoff-mcp-canary-v1/case.json \
+  --gold private_eval/handoff-mcp-canary-v1/gold.json \
+  --model gpt-5.6-sol \
+  --output results/handoff-mcp-canary-v1.json
+```
+
+The five arguments above are explicit by design. Private case/gold and run
+artifacts are ignored by Git. See
+[`docs/HANDOFF_MCP_CANARY.md`](docs/HANDOFF_MCP_CANARY.md) for the contract,
+failure interpretation, and acceptance checks.
 
 ### Obsidian CLI and permission lanes
 

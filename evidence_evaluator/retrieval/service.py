@@ -21,6 +21,18 @@ MAX_READ_LINES = 400
 MAX_READ_CHARS = 60_000
 MAX_PREVIEW_CHARS = 500
 
+COMPACT_CANDIDATE_KEYS = frozenset({
+    "path",
+    "canonical_path",
+    "authority_class",
+    "replica_of",
+    "score",
+    "rank",
+    "preview",
+    "preview_line_ranges",
+    "preview_truncated",
+})
+
 
 class ServiceError(ValueError):
     """Raised when a transport request violates the service contract."""
@@ -215,6 +227,29 @@ class RetrievalService:
                 "max_markdown_bytes": self.profile.max_markdown_bytes,
             },
         }
+
+
+def compact_search_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the bounded agent-facing projection of a search artifact.
+
+    The full candidate pool and turn-by-turn graph diagnostics are useful for
+    evaluator development, but exposing them to every MCP caller caused one
+    three-result search to consume roughly 280k input tokens. The artifact
+    digest still identifies the full in-process result.
+    """
+    compact = {
+        key: value
+        for key, value in result.items()
+        if key not in {"candidate_pool", "turns", "candidates"}
+    }
+    compact["candidates"] = [
+        {key: value for key, value in candidate.items()
+         if key in COMPACT_CANDIDATE_KEYS}
+        for candidate in result.get("candidates", [])
+    ]
+    compact["projection"] = "compact-v1"
+    compact["diagnostics_omitted"] = ["candidate_pool", "turns"]
+    return compact
 
 
 def _fallback_from_warnings(warnings: Any) -> str | None:

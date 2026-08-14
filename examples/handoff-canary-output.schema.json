@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["answer", "state_code", "current_state", "next_action_code", "next_action", "stop_condition_codes", "stop_conditions", "uncertainty"],
+  "properties": {
+    "answer": {"type": "string", "minLength": 1},
+    "state_code": {"type": "string", "minLength": 1},
+    "current_state": {
+      "type": "object",
+      "required": ["text", "citations"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1},
+        "citations": {"type": "array", "items": {"type": "object", "required": ["path", "line_start", "line_end"], "properties": {"path": {"type": "string", "minLength": 1}, "line_start": {"type": "integer", "minimum": 1}, "line_end": {"type": "integer", "minimum": 1}}, "additionalProperties": false}}
+      },
+      "additionalProperties": false
+    },
+    "next_action_code": {"type": "string", "minLength": 1},
+    "next_action": {
+      "type": "object",
+      "required": ["text", "citations"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1},
+        "citations": {"type": "array", "items": {"type": "object", "required": ["path", "line_start", "line_end"], "properties": {"path": {"type": "string", "minLength": 1}, "line_start": {"type": "integer", "minimum": 1}, "line_end": {"type": "integer", "minimum": 1}}, "additionalProperties": false}}
+      },
+      "additionalProperties": false
+    },
+    "stop_condition_codes": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "stop_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "citations"],
+        "properties": {
+          "text": {"type": "string", "minLength": 1},
+          "citations": {"type": "array", "items": {"type": "object", "required": ["path", "line_start", "line_end"], "properties": {"path": {"type": "string", "minLength": 1}, "line_start": {"type": "integer", "minimum": 1}, "line_end": {"type": "integer", "minimum": 1}}, "additionalProperties": false}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "uncertainty": {"type": "string"}
+  },
+  "additionalProperties": false
+}

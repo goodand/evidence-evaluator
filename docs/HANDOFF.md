@@ -332,3 +332,18 @@ PY
 
 다음 검색 개선은 새 아키텍처가 아니라 authority profile과 MCP compact projection의
 최소 수정으로 수행한다. 현재 smoke artifact는 등록 성공 근거로만 사용한다.
+
+## 13. Zero-context MCP handoff canary (2026-08-14)
+
+compact projection, content-free MCP audit, Codex allowlisted MCP provider,
+그리고 1-case canary runner를 구현했다. 실제 host-lane subject는 search 1회와
+read 2회로 handoff·authority를 모두 읽고 Runtime/Retrieval/Reconstruction을
+통과했다. 관리형 lane은 Codex app-server 권한 때문에 invalid-run이었다.
+
+계약과 결과:
+
+- [[HANDOFF_MCP_CANARY|canary contract and usage]]
+- [[HANDOFF_MCP_CANARY_RESULT_20260814|live result and permission-lane boundary]]
+
+이 결과를 v0.1 전체 검색 성능 조건 3의 통과로 해석하지 마라. 1개 case의 수직
+배관과 복구 정확성만 확립했다.
