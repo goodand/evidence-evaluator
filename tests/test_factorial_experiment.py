@@ -18,6 +18,7 @@ from evidence_evaluator.contract import (
 from evidence_evaluator.factorial import (
     _build_stage_receipt,
     _run_stage,
+    _stage_cell_paths,
     main,
     run_cell,
     run_helper,
@@ -43,6 +44,18 @@ from evidence_evaluator.retrieval.service import RetrievalService
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def test_stage_cell_paths_excludes_helper_artifacts_but_keeps_unknown_json(
+    tmp_path: Path,
+) -> None:
+    cell = tmp_path / "confirm-HOLD-01-R_DYNAMIC-r1.json"
+    helper = tmp_path / "confirm-HOLD-01-r1-helper.json"
+    extra = tmp_path / "confirm-unexpected.json"
+    for path in (cell, helper, extra):
+        path.write_text("{}", encoding="utf-8")
+
+    assert _stage_cell_paths(tmp_path, "confirm") == {cell, extra}
 
 
 def _service(tmp_path: Path) -> RetrievalService:

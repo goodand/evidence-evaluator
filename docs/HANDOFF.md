@@ -20,7 +20,7 @@ held-out confirm은 아직 실행하지 않았다. 설계 정본은
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
-python3 -m pytest tests/ -q                        # 현재 기대: 118 passed
+python3 -m pytest -q                                # 현재 기대: 113 passed, 6 skipped
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
 
@@ -392,3 +392,6 @@ screen에서 dynamic이 3개 paired case를 개선하고 회귀가 없어 `FULL_
 
 Codex가 이 단계에서 직접 겪은 신규 이슈, 반복 횟수 증가, 해결 근거와 미해결
 trust-pin 문제는 [[CODEX_SESSION_ISSUE_LOG_20260814]]에 기록했다.
+
+완전히 새로운 세션에서 held-out confirm을 이어갈 때는
+[[HANDOFF_20260814_HELDOUT_CONFIRM]]부터 읽는다.
