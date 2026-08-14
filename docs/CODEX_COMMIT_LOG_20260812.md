@@ -5,8 +5,10 @@
 - Recorded: 2026-08-12
 - Recorder: Codex
 - Local branch: `main`
-- Current local tip: `745323c`
-- Remote state at recording time: `origin/main` was not present in the local remote-tracking refs; remote ref inspection was also blocked by DNS/network failure.
+- Retrieval implementation tip: `745323c`
+- Initial commit-log commit: `3225de5`
+- Remote state at initial recording time: `origin/main` was absent. The push was retried on
+  2026-08-14 and `main` was created successfully on GitHub.
 
 ## Purpose
 
@@ -92,15 +94,20 @@ They remain external reference/consumer material.
 
 ## Push status
 
-Push was not completed during this recording because the environment could not resolve
-`github.com` while running `git ls-remote`. The local branch contains the six commits above
-and has no local changes after this log commit. Once network access is available, the intended
-non-destructive command is:
+The first attempt was blocked by DNS resolution. On 2026-08-14, Codex repeated the safety
+checks, ran the full local suite (`52 passed`), and pushed the branch without force or history
+rewriting:
 
 ```bash
 git push -u origin main
 ```
 
-Before pushing, rerun `git status --short`, `git diff --check`, and the tracked-sensitive-path
-check. Do not force-push or rewrite history. If the remote has since recreated `main` with
-unrelated commits, fetch and inspect the divergence before choosing a merge strategy.
+Git reported `main -> main` as a newly created remote branch and configured local `main` to
+track `origin/main`. Immediately before that push, remote `HEAD` pointed to
+`worktree-mcp-v01-backlinks`, so creating `main` did not by itself change the repository's
+default branch. GitHub repository settings must be used separately if `main` is intended to
+become the default branch.
+
+The `gh` CLI session reported an invalid API token, but Git push authentication through the
+configured Git credential path succeeded. PR creation and default-branch changes were not
+attempted.
