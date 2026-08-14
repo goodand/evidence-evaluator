@@ -339,6 +339,13 @@ def test_run_canary_scripted_e2e_preserves_audit_and_provenance(tmp_path: Path) 
         provider=scripted,
     )
     assert result["accepted"] is True
+    assert result["execution"] == {
+        "subject_model": "explicit-test-model",
+        "reasoning_effort": "medium",
+        "timeout_seconds": 600,
+        "max_calls": 6,
+        "output_k": 3,
+    }
     assert output_path.is_file()
     assert output_path.with_suffix(".mcp-audit.jsonl").is_file()
     assert output_path.with_suffix(".provider.jsonl").read_text() == "scripted raw"
@@ -366,4 +373,5 @@ def test_run_canary_timeout_is_invalid_not_retrieval_zero(tmp_path: Path) -> Non
         provider=timeout,
     )
     assert result["invalid_run"] is True
+    assert result["execution"]["subject_model"] == "explicit-test-model"
     assert result["retrieval"] is None

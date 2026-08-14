@@ -238,6 +238,13 @@ def run_canary(
     provider: Callable[..., dict[str, Any]] = run_codex_external_mcp_cli,
 ) -> dict[str, Any]:
     case, gold = _load(case_path), _load(gold_path)
+    execution = {
+        "subject_model": model,
+        "reasoning_effort": reasoning_effort,
+        "timeout_seconds": timeout_seconds,
+        "max_calls": max_calls,
+        "output_k": output_k,
+    }
     output_path = output_path.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path = output_path.with_suffix(".mcp-audit.jsonl")
@@ -284,6 +291,7 @@ def run_canary(
             result = {
                 "contract_version": RESULT_VERSION,
                 "case_id": case.get("id"),
+                "execution": execution,
                 "runtime": {"valid": False, "provider_error": str(exc)},
                 "retrieval": None,
                 "reconstruction": None,
@@ -303,6 +311,7 @@ def run_canary(
         observed["provider_meta"],
         max_calls=max_calls,
     )
+    result["execution"] = execution
     result["subject_response"] = observed["payload"]
     result["provider_meta"] = observed["provider_meta"]
     result["provenance"] = {
