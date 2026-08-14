@@ -208,7 +208,9 @@ class VaultCorpus:
             targets: list[str] = []
             raw_links = (
                 MARKDOWN_LINK.findall(document.body)
-                + WIKILINK.findall(document.body)
+                # Preserve wikilink syntax so paths containing spaces are not
+                # parsed as Markdown destinations with optional titles.
+                + [f"[[{value}]]" for value in WIKILINK.findall(document.body)]
                 + FILE_MENTION.findall(document.body)
             )
             for raw in raw_links:

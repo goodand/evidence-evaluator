@@ -148,6 +148,25 @@ def test_recall_first_recovers_zero_overlap_authority_by_two_graph_hops(
     assert result["terminal_reason"] == "graph-frontier-exhausted"
 
 
+def test_wikilinks_preserve_fully_qualified_paths_with_spaces(tmp_path: Path) -> None:
+    target = tmp_path / "Projects" / "Harbor Finch Survey" / "Handoff.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Handoff\n", encoding="utf-8")
+    (tmp_path / "Start.md").write_text(
+        "[[Projects/Harbor Finch Survey/Handoff|current handoff]]\n",
+        encoding="utf-8",
+    )
+
+    corpus = VaultCorpus(VaultProfile(root=tmp_path, obsidian_enabled=False))
+
+    assert corpus.links("Start.md") == [
+        "Projects/Harbor Finch Survey/Handoff.md"
+    ]
+    assert corpus.backlinks("Projects/Harbor Finch Survey/Handoff.md") == [
+        "Start.md"
+    ]
+
+
 def test_graph_frontier_beats_a_full_lexical_tail(tmp_path: Path) -> None:
     (tmp_path / "deep").mkdir()
     (tmp_path / "HANDOFF.md").write_text(

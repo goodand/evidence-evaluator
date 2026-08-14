@@ -358,3 +358,14 @@ navigation discovery를 evidence read와 혼동한 gold 결함, authority를 읽
 상세 결과: [[HANDOFF_MCP_PILOT_RESULT_20260814|three-case development pilot]].
 
 이 파일들은 하네스 개발에 사용됐으므로 confirmatory test set으로 재사용하지 마라.
+
+## 15. Independent confirmatory set (2026-08-14)
+
+별도 zero-context curator subagent가 6개 신규 case를 만들었고, main agent는 subject
+실행 전에 구조 감사와 retrieval qualification만 수행했다. isolated private corpus,
+case, gold, harness surface는 freeze digest로 동결됐으며 live subject run은 0건이다.
+
+상세 계약: [[HANDOFF_CONFIRMATORY_SET_20260814|independently curated set]].
+
+이 set에서 결함을 발견해 하네스를 수정하면 해당 case를 development로 강등하고
+새 case를 다시 curate해야 한다.
