@@ -100,6 +100,27 @@ not fail silently. Callers must search, inspect `fallback_used` and the
 returned warnings, then read or check backlinks on selected canonical files
 before treating a result as settled.
 
+### Codex global registration
+
+Register the checkout launcher once. The explicit environment keeps the
+globally visible server bound to the intended vault:
+
+```bash
+codex mcp add evidence-vault-mcp \
+  --env EVIDENCE_VAULT_ROOT=/Users/jaehyuntak/Desktop/Project_in_progress \
+  --env EVIDENCE_VAULT_NAME=Project_in_progress \
+  -- /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/scripts/run_obsidian_vault_mcp.sh
+```
+
+Verify the saved definition with `codex mcp get evidence-vault-mcp` and start
+a new Codex session before testing the tools. A configuration change cannot
+add tools to a session that is already running. Remove only this registration
+with `codex mcp remove evidence-vault-mcp`.
+
+Claude Code can use the same launcher from a project-scope `.mcp.json`. Both
+clients must point to this main checkout, not a temporary `.claude/worktrees`
+path.
+
 ### Obsidian CLI and permission lanes
 
 The filesystem graph is always available. Obsidian CLI graph expansion is

@@ -1,7 +1,7 @@
 # HANDOFF — Obsidian retrieval MCP v0.1
 
 이 문서 하나로 재개할 수 있게 쓴다. 이전 대화를 모른다고 가정한다.
-갱신 2026-08-12.
+갱신 2026-08-14.
 
 ## 1. 지금 상태 한 줄
 
@@ -12,7 +12,7 @@ fixture로 만들고 최소 수정하는 것이 다음이다.
 **추측하지 말고 물어라. 읽기 전용 두 명령이 상태를 말한다:**
 
 ```bash
-cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
+cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
 python3 -m pytest tests/ -q                        # 74 passed 여야 한다
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
@@ -20,7 +20,7 @@ python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP
 기대값(2026-08-12 종료 시점, **host lane**):
 
 ```
-tests/            73 passed
+tests/            74 passed
 v0.1 계약         12 passed  (stdio MCP 서버 프로세스에서 검증)
 실제 Vault E2E    2/5 회수   ← 조건 미달. docs/E2E_REAL_VAULT_2026-08-12.md
 ```
@@ -49,16 +49,17 @@ isolation, release attestation, GraphRAG, neural reranker.
 
 ```
 repo    /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
-worktree .claude/worktrees/mcp-v01-backlinks   ← 이 작업 위치
-branch  worktree-mcp-v01-backlinks
+branch  main
 
+8566851  feat — stdio launcher
+ea3c94c  docs — vault_backlinks와 fallback_used
+b6e74c2  fix — D2 exhaustive 계산
 7482549  docs — 실제 Vault E2E 5건, 2/5 회수, 조건 3 FAIL
 d93929c  feat — vault_backlinks 도구 + fallback_used 계약 필드
-745323c  (다른 agent) Add canonical Obsidian retrieval service   ← main의 끝
 ```
 
-**`origin`은 비어 있다.** 이 저장소는 **한 번도 push된 적이 없다**(원격에 브랜치
-0개). push는 사용자 승인 사항이다.
+기능 branch는 `main`에 병합됐고 `origin/main`으로 게시한다. force push, history
+rewrite, destructive reset은 금지한다.
 
 ## 4. 절대 하면 안 되는 것
 
@@ -67,7 +68,7 @@ d93929c  feat — vault_backlinks 도구 + fallback_used 계약 필드
 - **코드를 손으로 복사해 정본을 두 벌 만들지 마라.** 이 저장소가 검색 구현의
   정본이다.
 - `hidden_gold`, private answer key, credential을 읽거나 공개 저장소로 옮기지 마라.
-- push / force push / history rewrite / destructive reset 금지.
+- 승인되지 않은 push, force push, history rewrite, destructive reset 금지.
 - **오류를 빈 배열로 삼키거나 성공으로 위장하지 마라** — 아래 §5가 계약이다.
 
 ## 5. 계약 — 오류 허용과 fail-closed의 경계
@@ -282,6 +283,8 @@ PY
   실제 측정값(`graph-frontier-exhausted`)으로 정정
 - `docs/AUDIT_CLAUDE_MD_VACUOUS_PATTERNS.md` (신규) — CLAUDE.md·harness의
   공허 패턴 감사, D2 설계 제약의 근거
+- `scripts/run_obsidian_vault_mcp.sh` — cwd와 무관한 stdio launcher
+- `README.md` — Codex 전역 등록과 새 세션 검증 절차
 
 ## 11. v0.1 완료 조건 대비 현황
 
@@ -298,4 +301,4 @@ PY
 | 9 | focused + 전체 테스트 통과 | **PASS** (74) |
 | 10 | 실행 불가한 검증은 BLOCKED로 기록 | **PASS** |
 
-**3번과 8번이 남았다.**
+**3번만 남았다.** MCP 등록 성공은 검색 성능 조건 3의 통과를 의미하지 않는다.
