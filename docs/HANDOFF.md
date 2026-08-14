@@ -389,3 +389,6 @@ screen에서 dynamic이 3개 paired case를 개선하고 회귀가 없어 `FULL_
 선택했다. 현재 다음 행동은 frozen held-out confirm이다.
 
 상세 결과: [[HANDOFF_FACTORIAL_OPERATIONAL_CANARY_20260814]].
+
+Codex가 이 단계에서 직접 겪은 신규 이슈, 반복 횟수 증가, 해결 근거와 미해결
+trust-pin 문제는 [[CODEX_SESSION_ISSUE_LOG_20260814]]에 기록했다.

@@ -2,6 +2,7 @@
 
 - Operational recovery ID: `HFX2-AUG14`
 - Entry handoff: [[HANDOFF_FACTORIAL_V2]]
+- Codex issue log: [[CODEX_SESSION_ISSUE_LOG_20260814]]
 - Evidence role: canonical current-state authority for operational recovery
 
 ## Current state
