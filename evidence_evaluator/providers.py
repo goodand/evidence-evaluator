@@ -103,6 +103,7 @@ def _codex_event_summary(
     """
     seen: list[str] = []
     mcp_tools: list[str] = []
+    failed_mcp_tools: list[str] = []
     forbidden: list[str] = []
     for line in raw.split("\n-- STDERR --\n", 1)[0].splitlines():
         try:
@@ -132,15 +133,19 @@ def _codex_event_summary(
         elif event.get("type") in {None, "item.completed"}:
             # Codex emits started and completed envelopes for one MCP call.
             # Count only the completion; the server audit also records once.
-            mcp_tools.extend(names)
+            if item.get("status") == "failed" or item.get("error"):
+                failed_mcp_tools.extend(names)
+            else:
+                mcp_tools.extend(names)
     if forbidden:
         raise ProviderError(
             f"Codex emitted a forbidden or unrecognized tool event: {sorted(set(forbidden))}",
             provider_meta={"provider": "codex-mcp-cli", "tool_event_summary": {
                 "event_types": sorted(set(seen)), "mcp_tools": mcp_tools,
+                "failed_mcp_tools": failed_mcp_tools,
                 "forbidden": sorted(set(forbidden))}})
     return {"event_types": sorted(set(seen)), "mcp_tools": mcp_tools,
-            "forbidden": []}
+            "failed_mcp_tools": failed_mcp_tools, "forbidden": []}
 
 
 # --------------------------------------------------------------------------

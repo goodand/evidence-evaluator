@@ -100,6 +100,7 @@ def _meta(records: list[dict] | None = None) -> dict:
     return {"tool_event_summary": {
         "forbidden": [],
         "mcp_tools": [record["tool"] for record in records],
+        "failed_mcp_tools": [],
     }}
 
 
@@ -193,6 +194,48 @@ def test_codex_event_summary_counts_one_completed_event_per_call() -> None:
     }) for phase in ("item.started", "item.completed"))
     summary = _codex_event_summary(raw, frozenset({"vault_search"}))
     assert summary["mcp_tools"] == ["vault_search"]
+
+
+def test_failed_provider_tool_attempt_is_separate_from_server_audit() -> None:
+    raw = "\n".join(json.dumps({
+        "type": "item.completed",
+        "item": {
+            "type": "mcp_tool_call",
+            "tool": "vault_search",
+            "status": status,
+            "error": "bad argument" if status == "failed" else None,
+        },
+    }) for status in ("failed", "completed"))
+    summary = _codex_event_summary(raw, frozenset({"vault_search"}))
+    assert summary["mcp_tools"] == ["vault_search"]
+    assert summary["failed_mcp_tools"] == ["vault_search"]
+
+    records = _records()
+    meta = _meta(records)
+    meta["tool_event_summary"]["failed_mcp_tools"] = ["vault_search"]
+    result = assess_canary(
+        _case(), _gold(), _payload(), records, meta, max_calls=6
+    )
+    assert result["runtime"]["provider_trace_matches_audit"] is True
+    assert result["runtime"]["provider_attempt_count"] == 4
+    assert result["accepted"] is True
+
+
+def test_failed_provider_tool_attempts_still_consume_call_budget() -> None:
+    records = _records()
+    meta = _meta(records)
+    meta["tool_event_summary"]["failed_mcp_tools"] = [
+        "vault_search",
+        "vault_search",
+        "vault_search",
+        "vault_search",
+    ]
+    result = assess_canary(
+        _case(), _gold(), _payload(), records, meta, max_calls=6
+    )
+    assert result["runtime"]["provider_attempt_count"] == 7
+    assert result["runtime"]["valid"] is False
+    assert result["accepted"] is False
 
 
 def test_canary_rejects_provider_and_server_trace_mismatch() -> None:

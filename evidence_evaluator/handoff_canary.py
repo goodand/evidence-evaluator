@@ -103,8 +103,15 @@ def assess_canary(
     event_summary = provider_meta.get("tool_event_summary") or {}
     forbidden = event_summary.get("forbidden") or []
     provider_tools = event_summary.get("mcp_tools")
+    provider_failed_tools = event_summary.get("failed_mcp_tools") or []
     provider_trace_matches = (
         isinstance(provider_tools, list) and provider_tools == tools
+    )
+    provider_attempt_count = (
+        len(provider_tools) + len(provider_failed_tools)
+        if isinstance(provider_tools, list)
+        and isinstance(provider_failed_tools, list)
+        else max_calls + 1
     )
     runtime_valid = (
         1 <= len(records) <= max_calls
@@ -114,6 +121,7 @@ def assess_canary(
         and "vault_read" in tools
         and not forbidden
         and provider_trace_matches
+        and provider_attempt_count <= max_calls
     )
 
     search_paths: set[str] = set()
@@ -180,6 +188,8 @@ def assess_canary(
             "mcp_call_count": len(records),
             "tools": tools,
             "provider_tools": provider_tools,
+            "provider_failed_tools": provider_failed_tools,
+            "provider_attempt_count": provider_attempt_count,
             "provider_trace_matches_audit": provider_trace_matches,
             "errors": errors,
             "forbidden_events": forbidden,
