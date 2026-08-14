@@ -82,9 +82,23 @@ EVIDENCE_VAULT_PROFILE=/absolute/path/vault-profile.json evidence-vault-mcp
 ```
 
 Install it with `pip install 'evidence-evaluator[obsidian-mcp]'` when the
-`mcp` dependency is not already present. It exposes read-only `vault_search`
-and `vault_read`; callers must search, inspect the returned authority and
-warnings, then read selected canonical files.
+`mcp` dependency is not already present. It exposes three read-only tools:
+
+- `vault_search` — recall-first hybrid + graph search over the vault.
+- `vault_read` — read a byte-range of one canonical Markdown path.
+- `vault_backlinks` — which documents link to a given path. This is not a
+  second graph implementation; it exposes the same backlink data the graph
+  walk already computes internally, bounded and canonicalized the same way
+  as `vault_search`.
+
+Every response carries `fallback_used`: `null` when the Obsidian CLI answered
+directly, or the name of the degraded source (currently `"filesystem"`) when
+the CLI was unavailable and the filesystem link graph carried the answer
+instead. A non-null `fallback_used` always accompanies `status: "partial"`
+and `review_required: true` — the call still returns what it knows, it does
+not fail silently. Callers must search, inspect `fallback_used` and the
+returned warnings, then read or check backlinks on selected canonical files
+before treating a result as settled.
 
 ### Obsidian CLI and permission lanes
 

@@ -220,7 +220,13 @@ class RecallFirstRetriever:
             "turns": turns,
             "warnings": list(dict.fromkeys(warnings)),
             "terminal_reason": terminal_reason,
-            "exhaustive": False,
+            # Exhaustive means the search ran out of graph to explore, not
+            # merely out of turns. A budget cutoff or an empty lexical seed is
+            # genuinely inconclusive; the search space closing on its own is
+            # not. `turn-budget-exhausted` was also the loop's own default
+            # value regardless of outcome, which is why this used to be a
+            # hardcoded `False` -- see docs/HANDOFF.md D2.
+            "exhaustive": terminal_reason == "graph-frontier-exhausted",
         }
 
     def _canonicalize_live(

@@ -15,6 +15,7 @@ from .retriever import RecallFirstRetriever, RetrievalConfig
 
 SEARCH_CONTRACT = "evidence-vault-search-v1"
 READ_CONTRACT = "evidence-vault-read-v1"
+BACKLINKS_CONTRACT = "evidence-vault-backlinks-v1"
 MAX_QUERY_CHARS = 4_000
 MAX_READ_LINES = 400
 MAX_READ_CHARS = 60_000
@@ -35,6 +36,10 @@ class RetrievalService:
     ):
         self.profile = profile
         self.corpus = corpus or VaultCorpus(profile)
+        # Kept on the instance, not only handed to the retriever: `backlinks`
+        # needs the same live view the graph walk uses, and re-creating a second
+        # backend here would give the two tools different Obsidian state.
+        self.obsidian = obsidian
         self.retriever = RecallFirstRetriever(self.corpus, obsidian)
 
     @classmethod
@@ -95,6 +100,13 @@ class RetrievalService:
                 "Read selected canonical paths; treat zero hits or a budget stop as inconclusive."
             ),
         }
+        # v0.1 contract field, derived here rather than inside the retriever:
+        # the public API is what stabilises, the algorithm stays replaceable.
+        # `None` means "no fallback was needed" -- so it must not be None when
+        # one WAS used, or the field cannot distinguish the two cases.
+        result["fallback_used"] = _fallback_from_warnings(result.get("warnings"))
+        if result["fallback_used"]:
+            result["review_required"] = True
         result["artifact_digest"] = _digest(result)
         return result
 
@@ -113,7 +125,79 @@ class RetrievalService:
             raise ServiceError(str(exc)) from exc
         if len(result.content) > MAX_READ_CHARS:
             raise ServiceError(f"Read content exceeds {MAX_READ_CHARS} characters")
-        return {"contract_version": READ_CONTRACT, **asdict(result)}
+        out = {"contract_version": READ_CONTRACT, **asdict(result)}
+        out.setdefault("fallback_used", None)
+        return out
+
+    def backlinks(self, path: str, *, limit: int = 20) -> dict[str, Any]:
+        """Which documents link HERE. The third v0.1 tool.
+
+        NOT a new algorithm. The graph walk already computed backlinks
+        internally (`corpus.backlinks` plus the Obsidian CLI's live view); an
+        agent simply could not ASK for them. This is a thin exposure over the
+        pieces that were already there, which is why it reuses
+        `corpus.canonicalize` for the security boundary rather than growing a
+        second copy of it -- a second copy is a copy that can drift.
+
+        ERROR TOLERANCE. If the Obsidian CLI is unavailable the call does NOT
+        fail: it returns the filesystem graph, says `fallback_used:
+        "filesystem"`, and reports `status: "partial"` with the warning. A
+        degraded answer that says it is degraded is more useful than a refusal,
+        and far more useful than a silent empty list.
+
+        FAIL-CLOSED, though, on the security boundary: outside the vault, a
+        blocked part (`hidden_gold`, `private_eval`, ...), a symlink escape or a
+        non-Markdown path is refused outright. Those are not partial results.
+        """
+        if limit < 1:
+            raise ServiceError("limit must be >= 1")
+        canonical = self.corpus.canonicalize(path)
+        if canonical is None:
+            raise ServiceError(
+                f"refusing backlinks for {path!r}: not a canonical Markdown path "
+                "inside this vault, or it is on the blocked list")
+
+        warnings: list[str] = list(self.corpus.warnings)
+        fallback_used: str | None = None
+        found = list(self.corpus.backlinks(canonical.relative))
+
+        if self.obsidian is not None:
+            live = self.obsidian.neighbors(canonical)
+            warnings.extend(live.warnings)
+            if live.available:
+                for raw in live.backlinks:
+                    resolved = self.corpus.canonicalize(raw)
+                    if resolved is not None and resolved.relative not in found:
+                        found.append(resolved.relative)
+            else:
+                # The CLI is the preferred source; losing it is a degradation,
+                # not a failure. Name it so a caller can tell the two apart.
+                fallback_used = "filesystem"
+        else:
+            fallback_used = "filesystem"
+
+        found.sort()
+        truncated = len(found) > limit
+        status = "partial" if (fallback_used or warnings) else "ok"
+        return {
+            "contract_version": BACKLINKS_CONTRACT,
+            "status": status,
+            "path": canonical.relative,
+            "backlinks": found[:limit],
+            "limit": limit,
+            "truncated": truncated,
+            "discovered_path_count": len(found),
+            "warnings": list(dict.fromkeys(warnings)),
+            "fallback_used": fallback_used,
+            "review_required": bool(fallback_used or warnings or not found),
+            "exhaustive": not truncated and fallback_used is None,
+            "terminal_reason": ("graph-provider-partially-unavailable"
+                               if fallback_used else "complete"),
+            "next_action": (
+                "Read a backlink to find the entry point that cites this "
+                "document; zero backlinks is not evidence that none exist when "
+                "review_required is true."),
+        }
 
     def policy(self) -> dict[str, Any]:
         return {
@@ -131,6 +215,21 @@ class RetrievalService:
                 "max_markdown_bytes": self.profile.max_markdown_bytes,
             },
         }
+
+
+def _fallback_from_warnings(warnings: Any) -> str | None:
+    """Which degraded source produced this answer, or None.
+
+    Read off the warnings the providers already emit, so adding a provider does
+    not require touching the retriever. A warning naming the Obsidian CLI means
+    the filesystem graph carried the run.
+    """
+    for warning in (warnings or []):
+        low = str(warning).lower()
+        if "obsidian" in low and ("unavailable" in low or "failed" in low
+                                  or "not found" in low or "timeout" in low):
+            return "filesystem"
+    return None
 
 
 def _preview(body: str, query: str) -> tuple[str, list[str], bool]:
