@@ -5,9 +5,12 @@
 
 ## 1. 지금 상태 한 줄
 
-**세 도구는 동작하고, v0.1 완료 조건 3번이 실패했다** — 실제 Vault 5문항 중
-**2건만 회수**(조건은 4건). 아키텍처를 다시 설계하지 마라. 실패 query 하나를
-fixture로 만들고 최소 수정하는 것이 다음이다.
+**세 MCP 도구는 동작하며, 동결한 zero-context confirmatory 6문항은 6/6
+통과했다.** Runtime, Retrieval, Reconstruction을 분리해 측정했고 실행 무효는
+0건이다. 공개 결과는
+[`HANDOFF_CONFIRMATORY_RESULT_20260814.md`](HANDOFF_CONFIRMATORY_RESULT_20260814.md)에
+있다. 아래의 실제 Vault 2/5 결과는 2026-08-12 개발 기준선이며 최신 confirmatory
+결과와 혼동하지 마라.
 
 **추측하지 말고 물어라. 읽기 전용 두 명령이 상태를 말한다:**
 

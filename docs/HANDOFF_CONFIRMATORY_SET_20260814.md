@@ -2,8 +2,9 @@
 
 ## Status
 
-`handoff-confirmatory-v1` is **frozen-unrun**. No live subject has received any
-of its six questions or corpus files.
+`handoff-confirmatory-v1` is **frozen-executed**. Its six cases were each run
+once after freeze, with no invalid runs and no input or harness amendments.
+See [`HANDOFF_CONFIRMATORY_RESULT_20260814.md`](HANDOFF_CONFIRMATORY_RESULT_20260814.md).
 
 Freeze digest:
 `5187e0e9442b70131eb8bdc440f5d6990076d44198912ae721946ef3afe3c255`
@@ -67,3 +68,6 @@ python3 scripts/verify_handoff_confirmatory_freeze.py \
 Do not repair the harness using these cases and still call their later scores
 confirmatory. If a case exposes a defect that is fixed, move that case to the
 development set and curate a replacement with a new freeze digest.
+
+The first execution did not expose such a defect: all six cases passed the
+runtime, retrieval, reconstruction, and evidence layers.
