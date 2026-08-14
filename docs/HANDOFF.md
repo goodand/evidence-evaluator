@@ -374,3 +374,13 @@ case, gold, harness surface는 freeze digest로 동결됐으며 live subject run
 
 이 set에서 결함을 발견해 하네스를 수정하면 해당 case를 development로 강등하고
 새 case를 다시 curate해야 한다.
+
+## 16. Actual experiment handoff operational canary (2026-08-14)
+
+합성 corpus가 아니라 현재 factorial 실험의 handoff와 current-state authority를
+zero-context subject가 직접 검색하고 읽는 canary를 실행했다. 최초 상태 회수 후
+적대적 검증이 provider/audit provenance 결함을 찾아 수정했고, 그 수정으로 기존
+qualification이 stale해지자 handoff를 갱신했다. 두 번째 subject는 이전 상태가
+아니라 새 blocker와 재qualification 행동을 정확히 회수했다.
+
+상세 결과: [[HANDOFF_FACTORIAL_OPERATIONAL_CANARY_20260814]].
