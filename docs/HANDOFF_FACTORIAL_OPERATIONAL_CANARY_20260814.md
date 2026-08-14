@@ -124,11 +124,11 @@ previous readiness state. It does not establish static/dynamic arm effects,
 subagent effects, vault-wide recall, backlink necessity, or automated semantic
 entailment.
 
-Current local verification is 116 passed in the present host-capable lane.
+Current local verification is 118 passed in the present host-capable lane.
 Managed lanes that block `AF_UNIX` must still report the affected checks as
-BLOCKED rather than silently treating skips as passes. The next experiment
-action remains the six-case transport requalification; the development screen
-is blocked.
+BLOCKED rather than silently treating skips as passes. Transport
+requalification now passes; the next experiment action is the preregistered
+16-cell development screen.
 
 ## Subject model policy
 
@@ -138,3 +138,28 @@ unnecessarily large for this three-call recovery task. This policy does not
 change the model frozen in the separate factorial performance manifest.
 Attempt 4 establishes that Luna can complete this one operational case; it
 does not establish comparative model performance or multi-case reliability.
+
+## Transport requalification and attempt 5
+
+The six frozen transport cases were rerun once each under the current harness
+with `gpt-5.6-luna`. All six were accepted with zero invalid runs. Every result
+records the subject model, current execution parameters, exact provider/server
+trace agreement, source hashes, and MCP audit hash. The append-only receipt
+also verifies the unchanged historical private inputs and current transport
+surface.
+
+- receipt digest: `6b41b82d36d2c2782bed583f3655af7b9dc9d8c62aa71febd3f341dd0752ca4e`
+- accepted: 6/6
+- invalid runs: 0
+- provider attempts: 19 total; no failed provider calls
+
+After the authority changed to `READY_FOR_DEVELOPMENT_SCREEN`, attempt 5 used
+one search and two reads. It recovered the new state, the sole authorized next
+action `RUN_16_CELL_DEVELOPMENT_SCREEN`, and all three new stop codes. Runtime,
+Retrieval, and Reconstruction passed.
+
+- attempt 5 result: `a219648e2814ac26b9c9156b8e38a062195aa4795655fb7d98208a1ba83ae4a3`
+- attempt 5 MCP audit: `f82b0b98fc96b1a466b3f9b5d8c519af4954f9160166f6887f8e417d7be4c18f`
+
+The development screen has not run. Requalification establishes current
+transport operability only and is excluded from factorial arm estimates.

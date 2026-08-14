@@ -6,33 +6,37 @@
 
 ## Current state
 
-State code: `TRANSPORT_REQUALIFICATION_REQUIRED`.
+State code: `READY_FOR_DEVELOPMENT_SCREEN`.
 
-The prior transport qualification accepted 6/6 with zero invalid runs, but
-changes to `handoff_canary.py`, `providers.py`, and `retrieval/mcp_server.py`
-made its harness hashes stale. It is historical evidence, not current
-authorization. The current factorial freeze digest is
+The prior transport qualification remains historical and was not overwritten.
+The six frozen transport cases were rerun under the current transport surface
+with `gpt-5.6-luna`: 6/6 were accepted with zero invalid runs. The append-only
+qualification receipt verifies against the current source, results, audits,
+model, and frozen private inputs. Its tracked digest is
+`6b41b82d36d2c2782bed583f3655af7b9dc9d8c62aa71febd3f341dd0752ca4e`.
+The current factorial freeze digest is
 `a01569b7a1add4ae0a02ac18882384164617c7da6540c16340db0bdb510d2564`.
 The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the implemented
 structured hard gate, critical-path recall 1.0, exact authority hit, and exact
 state, next-action, and stop codes under the preceding harness surface. The
-16-cell development screen has not run and is not currently authorized.
+16-cell development screen has not run and is now the only authorized next
+action.
 
 ## Authorized continuation
 
-Next-action code: `REQUALIFY_6_TRANSPORT_CASES`.
+Next-action code: `RUN_16_CELL_DEVELOPMENT_SCREEN`.
 
-Rerun the six frozen transport cases with the current harness using fresh
-output filenames. Verify that all six are valid and accepted and that the
-current harness hashes are recorded before changing readiness to the
-development screen.
+Run only the preregistered development screen: eight development cases across
+`S_STATIC` and `S_DYNAMIC`, one replicate each. Preserve every cell, summary,
+and `screen-receipt.json` as append-only artifacts.
 
 ## Stop conditions
 
-- `BLOCK_DEVELOPMENT_SCREEN_UNTIL_REQUALIFIED`: do not run the 16-cell screen
-  until all six transport cases pass under the current harness surface.
-- `PRESERVE_PRIOR_QUALIFICATION_AS_HISTORICAL`: do not overwrite or relabel the
-  prior 6/6 result; write a new qualification artifact.
+- `STOP_AFTER_SCREEN_RECEIPT`: stop after the screen and its receipt are
+  written; inspect the screen decision before any held-out execution.
+- `BLOCK_CONFIRM_UNTIL_SCREEN_PIN_COMMITTED`: do not run `confirm` until the
+  screen receipt digest is copied into `TRUSTED_SCREEN_RECEIPT_DIGEST` and that
+  pin is committed separately.
 - `NO_PERFORMANCE_CLAIMS_FROM_CANARY`: do not infer controller, helper,
   interaction, held-out, or vault-wide performance from the one-cell canary.
 

@@ -18,8 +18,10 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
 ## Status
 
 - Historical transport qualification: 6/6 accepted, 0 invalid runs under the
-  prior harness surface. It is now **stale** after provenance hardening and is
-  not current authorization.
+  prior harness surface. It remains historical and was not overwritten.
+- Current transport requalification: **PASS**, 6/6 accepted and 0 invalid runs
+  with `gpt-5.6-luna`. Receipt digest:
+  `6b41b82d36d2c2782bed583f3655af7b9dc9d8c62aa71febd3f341dd0752ca4e`.
 - Qualification freeze: `5187e0e9442b70131eb8bdc440f5d6990076d44198912ae721946ef3afe3c255`.
 - Factorial set: **frozen**, 16 independently drafted synthetic cases.
 - Factorial freeze: `a01569b7a1add4ae0a02ac18882384164617c7da6540c16340db0bdb510d2564`.
@@ -27,8 +29,9 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
   structured hard gate was true,
   critical-path recall 1.0, exact authority hit, 0 invalid runs, and no guard
   rejection. This single cell establishes plumbing only.
-- Current readiness: **transport requalification required**.
-- Development screen: **not run and blocked until requalification passes**.
+- Current readiness: **ready for development screen**.
+- Development screen: **not run; the preregistered 16-cell screen is the only
+  authorized next action**.
 - Performance claims: **none yet**.
 
 The private corpus, cases, gold, curator draft, structural qualification, and freeze receipt are under ignored `private_eval/handoff-factorial-v2/`. They must not be pushed.
@@ -76,9 +79,10 @@ Qualification is never included in arm estimates.
 ## Commands
 
 ```bash
-python3 -m evidence_evaluator.factorial qualify \
+python3 -m evidence_evaluator.transport_qualification verify \
   --confirmatory-dir private_eval/handoff-confirmatory-v1 \
-  --results-dir results
+  --results-dir results \
+  --output private_eval/transport-requalification-v1/receipt.json
 
 python3 -m evidence_evaluator.factorial freeze \
   --manifest private_eval/handoff-factorial-v2/manifest.json \

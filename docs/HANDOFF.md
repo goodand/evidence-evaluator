@@ -8,7 +8,8 @@
 **세 MCP 도구는 동작하며, 동결한 zero-context confirmatory 6문항은 6/6
 통과했다.** Runtime, Retrieval, Reconstruction을 분리해 측정했고 실행 무효는
 0건이다. 이 결과를 qualification으로만 사용하는 단계형 2x2 검색 실험도
-구현·동결했으며 아직 subject run은 하지 않았다. 설계 정본은
+구현·동결했고 one-cell canary와 current-harness transport requalification을
+완료했다. 16-cell development screen은 아직 실행하지 않았다. 설계 정본은
 [`HANDOFF_FACTORIAL_V2.md`](HANDOFF_FACTORIAL_V2.md)다. 공개 qualification 결과는
 [`HANDOFF_CONFIRMATORY_RESULT_20260814.md`](HANDOFF_CONFIRMATORY_RESULT_20260814.md)에
 있다. 아래의 실제 Vault 2/5 결과는 2026-08-12 개발 기준선이며 최신 confirmatory
@@ -18,7 +19,7 @@
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
-python3 -m pytest tests/ -q                        # 현재 기대: 110 passed
+python3 -m pytest tests/ -q                        # 현재 기대: 118 passed
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
 
@@ -381,6 +382,8 @@ case, gold, harness surface는 freeze digest로 동결됐으며 live subject run
 zero-context subject가 직접 검색하고 읽는 canary를 실행했다. 최초 상태 회수 후
 적대적 검증이 provider/audit provenance 결함을 찾아 수정했고, 그 수정으로 기존
 qualification이 stale해지자 handoff를 갱신했다. 두 번째 subject는 이전 상태가
-아니라 새 blocker와 재qualification 행동을 정확히 회수했다.
+아니라 새 blocker와 재qualification 행동을 정확히 회수했다. 이후 Luna로 frozen
+transport 6개를 current harness에서 다시 실행해 6/6 accepted, invalid 0을 얻었고,
+현재 다음 행동은 16-cell development screen이다.
 
 상세 결과: [[HANDOFF_FACTORIAL_OPERATIONAL_CANARY_20260814]].
