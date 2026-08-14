@@ -12,7 +12,7 @@ The prior transport qualification accepted 6/6 with zero invalid runs, but
 changes to `handoff_canary.py`, `providers.py`, and `retrieval/mcp_server.py`
 made its harness hashes stale. It is historical evidence, not current
 authorization. The current factorial freeze digest is
-`d662fc865f2cccbddbc574206f7f7ea69172e6e03229f6f7dbe7f03943c4f436`.
+`a01569b7a1add4ae0a02ac18882384164617c7da6540c16340db0bdb510d2564`.
 The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the implemented
 structured hard gate, critical-path recall 1.0, exact authority hit, and exact
 state, next-action, and stop codes under the preceding harness surface. The

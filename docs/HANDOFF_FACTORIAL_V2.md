@@ -22,7 +22,7 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
   not current authorization.
 - Qualification freeze: `5187e0e9442b70131eb8bdc440f5d6990076d44198912ae721946ef3afe3c255`.
 - Factorial set: **frozen**, 16 independently drafted synthetic cases.
-- Factorial freeze: `d662fc865f2cccbddbc574206f7f7ea69172e6e03229f6f7dbe7f03943c4f436`.
+- Factorial freeze: `a01569b7a1add4ae0a02ac18882384164617c7da6540c16340db0bdb510d2564`.
 - Development canary: **PASS** for `DEV-01/S_DYNAMIC`; the implemented
   structured hard gate was true,
   critical-path recall 1.0, exact authority hit, 0 invalid runs, and no guard
