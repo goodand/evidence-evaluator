@@ -1,5 +1,11 @@
 # Handoff retrieval factorial v2
 
+- Operational recovery ID: `HFX2-AUG14`
+- Current evidence authority: [[HANDOFF_FACTORIAL_V2_EVIDENCE]]
+
+This handoff is the navigation entry point. A continuation agent must read the
+linked evidence authority before deciding the current state or next action.
+
 ## Purpose
 
 This experiment answers two questions only:
