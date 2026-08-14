@@ -347,3 +347,14 @@ read 2회로 handoff·authority를 모두 읽고 Runtime/Retrieval/Reconstructio
 
 이 결과를 v0.1 전체 검색 성능 조건 3의 통과로 해석하지 마라. 1개 case의 수직
 배관과 복구 정확성만 확립했다.
+
+## 14. Three-case development pilot (2026-08-14)
+
+direct, graph-entry, stale-authority 세 case를 host lane에서 실행했다. 실행 중
+navigation discovery를 evidence read와 혼동한 gold 결함, authority를 읽기만 하고
+주장에 쓰지 않아도 통과하던 evaluator 결함, compact 응답의 반복 provider warning을
+수정했다. 원본 run과 수정 전 gold는 보존했고 graph case는 동일 trace로 재평가했다.
+
+상세 결과: [[HANDOFF_MCP_PILOT_RESULT_20260814|three-case development pilot]].
+
+이 파일들은 하네스 개발에 사용됐으므로 confirmatory test set으로 재사용하지 마라.

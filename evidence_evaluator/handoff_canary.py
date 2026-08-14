@@ -75,6 +75,14 @@ def _claim_supported(claim: Any, reads: list[dict[str, Any]]) -> bool:
     )
 
 
+def _claim_uses_authority(claim: Any, authority_paths: set[str]) -> bool:
+    citations = claim.get("citations") if isinstance(claim, dict) else None
+    return isinstance(citations, list) and any(
+        isinstance(item, dict) and item.get("path") in authority_paths
+        for item in citations
+    )
+
+
 def assess_canary(
     case: dict[str, Any],
     gold: dict[str, Any],
@@ -117,11 +125,16 @@ def assess_canary(
     }
     required = set(gold["required_read_paths"])
     critical_recall = len(required & read_paths) / len(required) if required else 1.0
+    navigation = set(gold.get("navigation_paths") or [])
+    navigation_recall = (
+        len(navigation & search_paths) / len(navigation) if navigation else 1.0
+    )
     handoff_path = str(gold["handoff_path"])
     authority_paths = set(gold["authority_paths"])
     retrieval = {
         "handoff_discovered": handoff_path in search_paths,
         "critical_path_recall": critical_recall,
+        "navigation_discovery_recall": navigation_recall,
         "exact_authority_hit": bool(authority_paths & read_paths),
         "read_paths": sorted(read_paths),
         "search_paths": sorted(search_paths),
@@ -133,6 +146,9 @@ def assess_canary(
     citations_supported = bool(claims) and all(
         _claim_supported(claim, reads) for claim in claims
     )
+    authority_support = bool(claims) and all(
+        _claim_uses_authority(claim, authority_paths) for claim in claims
+    )
     expected_stops = set(gold["stop_condition_codes"])
     actual_stops = set(payload.get("stop_condition_codes") or [])
     reconstruction = {
@@ -140,12 +156,14 @@ def assess_canary(
         "next_action_accuracy": payload.get("next_action_code") == gold["next_action_code"],
         "stop_condition_accuracy": actual_stops == expected_stops,
         "citations_supported_by_actual_reads": citations_supported,
+        "authority_citation_present_for_every_claim": authority_support,
     }
 
     accepted = (
         runtime_valid
         and retrieval["handoff_discovered"]
         and retrieval["critical_path_recall"] == 1.0
+        and retrieval["navigation_discovery_recall"] == 1.0
         and retrieval["exact_authority_hit"]
         and all(reconstruction.values())
     )

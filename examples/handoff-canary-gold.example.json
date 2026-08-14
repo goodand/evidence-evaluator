@@ -3,6 +3,7 @@
   "case_id": "EXAMPLE-01",
   "handoff_path": "notes/handoff.md",
   "authority_paths": ["notes/authority.md"],
+  "navigation_paths": ["notes/entry.md"],
   "required_read_paths": ["notes/handoff.md", "notes/authority.md"],
   "state_code": "READY",
   "next_action_code": "RUN_ONE",

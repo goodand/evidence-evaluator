@@ -10,7 +10,7 @@ import pytest
 
 from evidence_evaluator.retrieval.cli import main as cli_main
 from evidence_evaluator.retrieval.profile import VaultProfile
-from evidence_evaluator.retrieval.service import RetrievalService
+from evidence_evaluator.retrieval.service import RetrievalService, compact_search_result
 
 
 @pytest.fixture()
@@ -65,6 +65,27 @@ def test_cli_and_service_return_same_canonical_candidates(
         item["path"] for item in expected["candidates"]
     ]
     assert actual["retrieved_paths"] == expected["retrieved_paths"]
+
+
+def test_compact_projection_collapses_repeated_provider_warnings() -> None:
+    result = {
+        "candidates": [],
+        "warnings": [
+            "Obsidian backlinks unavailable for a.md",
+            "Obsidian links unavailable for b.md",
+            "Ignored symlink directory: linked",
+        ],
+        "candidate_pool": ["a.md"],
+        "turns": [{"large": "diagnostic"}],
+    }
+    compact = compact_search_result(result)
+    assert compact["warning_count"] == 3
+    assert compact["warnings"] == [
+        "Ignored symlink directory: linked",
+        "Obsidian CLI graph probes unavailable or failed: 2; filesystem fallback used.",
+    ]
+    assert "candidate_pool" not in compact
+    assert "turns" not in compact
 
 
 def test_cli_read_rejects_private_material(

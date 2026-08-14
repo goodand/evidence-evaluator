@@ -36,9 +36,12 @@ range fit inside a successful `vault_read` row.
 1. **Runtime**: provider completed, MCP call count is within budget, search and
    read both occurred, and no forbidden/native tool event or MCP error exists.
 2. **Retrieval**: search discovered the handoff, all critical paths were read,
-   and at least one exact authority path was hit.
+   at least one exact authority path was hit, and declared navigation paths
+   were discovered. Navigation paths do not become mandatory evidence reads.
 3. **Reconstruction**: state, next-action, and stop codes match frozen gold and
-   every claim has a supervisor-supported citation.
+   every claim has a supervisor-supported citation including at least one
+   citation to a declared authority path. Merely reading authority while
+   grounding the answer in navigation or stale notes does not pass.
 
 Timeout, MCP startup failure, or an unavailable permission lane is an invalid
 run, not retrieval score zero. `vault_backlinks` is allowed but not mandatory

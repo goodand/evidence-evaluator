@@ -109,6 +109,36 @@ def test_canary_accepts_only_observed_search_reads_and_supported_claims() -> Non
     assert result["reconstruction"]["citations_supported_by_actual_reads"] is True
 
 
+def test_navigation_must_be_discovered_but_need_not_be_read() -> None:
+    gold = _gold()
+    gold["navigation_paths"] = ["notes/entry.md"]
+    records = _records()
+    records[0]["result"]["retrieved_paths"].append("notes/entry.md")
+    result = assess_canary(_case(), gold, _payload(), records, _meta(), max_calls=6)
+    assert result["accepted"] is True
+    assert "notes/entry.md" not in result["retrieval"]["read_paths"]
+    assert result["retrieval"]["navigation_discovery_recall"] == 1.0
+
+    records[0]["result"]["retrieved_paths"].remove("notes/entry.md")
+    missed = assess_canary(_case(), gold, _payload(), records, _meta(), max_calls=6)
+    assert missed["accepted"] is False
+    assert missed["retrieval"]["navigation_discovery_recall"] == 0.0
+
+
+def test_reading_authority_is_not_enough_when_claims_cite_only_navigation() -> None:
+    payload = _payload(citation_path=HANDOFF)
+    result = assess_canary(
+        _case(), _gold(), payload, _records(), _meta(), max_calls=6
+    )
+    assert result["runtime"]["valid"] is True
+    assert result["retrieval"]["exact_authority_hit"] is True
+    assert result["reconstruction"]["citations_supported_by_actual_reads"] is True
+    assert result["reconstruction"][
+        "authority_citation_present_for_every_claim"
+    ] is False
+    assert result["accepted"] is False
+
+
 def test_committed_output_schema_parses_and_enforces_the_subject_payload() -> None:
     schema = json.loads(
         (Path(__file__).parents[1] / "examples" / "handoff-canary-output.schema.json")

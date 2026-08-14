@@ -247,8 +247,25 @@ def compact_search_result(result: dict[str, Any]) -> dict[str, Any]:
          if key in COMPACT_CANDIDATE_KEYS}
         for candidate in result.get("candidates", [])
     ]
+    warnings = [str(item) for item in result.get("warnings", [])]
+    compact["warning_count"] = len(warnings)
+    compact["warnings"] = _compact_warnings(warnings)
     compact["projection"] = "compact-v1"
     compact["diagnostics_omitted"] = ["candidate_pool", "turns"]
+    return compact
+
+
+def _compact_warnings(warnings: list[str]) -> list[str]:
+    obsidian = [item for item in warnings if "obsidian" in item.casefold()]
+    other = list(dict.fromkeys(item for item in warnings if item not in obsidian))
+    compact = [item[:300] for item in other[:5]]
+    if obsidian:
+        compact.append(
+            f"Obsidian CLI graph probes unavailable or failed: {len(obsidian)}; "
+            "filesystem fallback used."
+        )
+    if len(other) > 5:
+        compact.append(f"Additional non-Obsidian warnings omitted: {len(other) - 5}.")
     return compact
 
 
