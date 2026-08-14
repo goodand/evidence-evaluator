@@ -101,3 +101,10 @@ Current local verification is 108 passed and 6 skipped. The six skips are
 `AF_UNIX` capability blocks in this managed lane, not silent passes. The next
 experiment action remains the six-case transport requalification; the
 development screen is blocked.
+
+## Subject model policy
+
+Attempts 1 and 2 used `gpt-5.6-sol` and remain historical artifacts. Future
+low-complexity operational handoff subjects use `gpt-5.6-luna`; `sol` is
+unnecessarily large for this three-call recovery task. This policy does not
+change the model frozen in the separate factorial performance manifest.
