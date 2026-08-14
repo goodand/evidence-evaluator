@@ -29,10 +29,13 @@ It does not evaluate repository patch quality, general agent autonomy, safety po
   structured hard gate was true,
   critical-path recall 1.0, exact authority hit, 0 invalid runs, and no guard
   rejection. This single cell establishes plumbing only.
-- Current readiness: **ready for development screen**.
-- Development screen: **not run; the preregistered 16-cell screen is the only
-  authorized next action**.
-- Performance claims: **none yet**.
+- Current readiness: **screen complete; ready for held-out full 2x2**.
+- Development screen: **complete**, 16/16 valid. `S_DYNAMIC` improved three
+  paired cases with zero regressions, false absences, or premature stops.
+- Screen receipt: `40027887b71d7bc23b20bb7b397233c4a9c492440f6ee3a2c9dc934b995f6568`,
+  pinned by commit `21e2f2a`.
+- Performance claims: development-screen evidence only; held-out performance
+  and subagent/interaction effects remain unmeasured.
 
 The private corpus, cases, gold, curator draft, structural qualification, and freeze receipt are under ignored `private_eval/handoff-factorial-v2/`. They must not be pushed.
 The receipt is also checked against the git-tracked trust root in

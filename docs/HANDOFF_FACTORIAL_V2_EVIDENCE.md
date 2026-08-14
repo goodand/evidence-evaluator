@@ -6,7 +6,7 @@
 
 ## Current state
 
-State code: `READY_FOR_DEVELOPMENT_SCREEN`.
+State code: `SCREEN_COMPLETE_CONFIRM_PINNED`.
 
 The prior transport qualification remains historical and was not overwritten.
 The six frozen transport cases were rerun under the current transport surface
@@ -16,29 +16,28 @@ model, and frozen private inputs. Its tracked digest is
 `6b41b82d36d2c2782bed583f3655af7b9dc9d8c62aa71febd3f341dd0752ca4e`.
 The current factorial freeze digest is
 `a01569b7a1add4ae0a02ac18882384164617c7da6540c16340db0bdb510d2564`.
-The post-freeze `DEV-01/S_DYNAMIC` canary attempt 8 passed the implemented
-structured hard gate, critical-path recall 1.0, exact authority hit, and exact
-state, next-action, and stop codes under the preceding harness surface. The
-16-cell development screen has not run and is now the only authorized next
-action.
+The 16-cell development screen completed with zero invalid runs. Dynamic
+improved three paired cases and regressed none; false absence and premature
+stop were both zero. The gate selected `FULL_2X2`. The screen receipt digest
+`40027887b71d7bc23b20bb7b397233c4a9c492440f6ee3a2c9dc934b995f6568`
+is pinned in commit `21e2f2a` and the public scorer reverified it.
 
 ## Authorized continuation
 
-Next-action code: `RUN_16_CELL_DEVELOPMENT_SCREEN`.
+Next-action code: `RUN_HELD_OUT_FULL_2X2_CONFIRM`.
 
-Run only the preregistered development screen: eight development cases across
-`S_STATIC` and `S_DYNAMIC`, one replicate each. Preserve every cell, summary,
-and `screen-receipt.json` as append-only artifacts.
+Run the preregistered held-out confirm stage: eight held-out cases across all
+four arms and three replicates. Do not change the frozen harness, cases, gold,
+model, screen artifacts, or trusted pins before that run.
 
 ## Stop conditions
 
-- `STOP_AFTER_SCREEN_RECEIPT`: stop after the screen and its receipt are
-  written; inspect the screen decision before any held-out execution.
-- `BLOCK_CONFIRM_UNTIL_SCREEN_PIN_COMMITTED`: do not run `confirm` until the
-  screen receipt digest is copied into `TRUSTED_SCREEN_RECEIPT_DIGEST` and that
-  pin is committed separately.
-- `NO_PERFORMANCE_CLAIMS_FROM_CANARY`: do not infer controller, helper,
-  interaction, held-out, or vault-wide performance from the one-cell canary.
+- `NO_TUNING_AFTER_SCREEN`: do not modify the harness or evaluation assets in
+  response to development-screen outcomes before held-out confirmation.
+- `PRESERVE_SCREEN_RECEIPT_AND_PIN`: do not overwrite the screen artifacts or
+  change the trusted receipt digest.
+- `NO_HELD_OUT_CLAIMS_BEFORE_CONFIRM`: screen results do not establish held-out,
+  subagent, or interaction effects.
 
 ## Evidence boundary
 

@@ -9,7 +9,8 @@
 통과했다.** Runtime, Retrieval, Reconstruction을 분리해 측정했고 실행 무효는
 0건이다. 이 결과를 qualification으로만 사용하는 단계형 2x2 검색 실험도
 구현·동결했고 one-cell canary와 current-harness transport requalification을
-완료했다. 16-cell development screen은 아직 실행하지 않았다. 설계 정본은
+완료했다. 16-cell development screen도 완료해 `FULL_2X2` gate를 통과했고,
+held-out confirm은 아직 실행하지 않았다. 설계 정본은
 [`HANDOFF_FACTORIAL_V2.md`](HANDOFF_FACTORIAL_V2.md)다. 공개 qualification 결과는
 [`HANDOFF_CONFIRMATORY_RESULT_20260814.md`](HANDOFF_CONFIRMATORY_RESULT_20260814.md)에
 있다. 아래의 실제 Vault 2/5 결과는 2026-08-12 개발 기준선이며 최신 confirmatory
@@ -384,6 +385,7 @@ zero-context subject가 직접 검색하고 읽는 canary를 실행했다. 최�
 qualification이 stale해지자 handoff를 갱신했다. 두 번째 subject는 이전 상태가
 아니라 새 blocker와 재qualification 행동을 정확히 회수했다. 이후 Luna로 frozen
 transport 6개를 current harness에서 다시 실행해 6/6 accepted, invalid 0을 얻었고,
-현재 다음 행동은 16-cell development screen이다.
+screen에서 dynamic이 3개 paired case를 개선하고 회귀가 없어 `FULL_2X2`를
+선택했다. 현재 다음 행동은 frozen held-out confirm이다.
 
 상세 결과: [[HANDOFF_FACTORIAL_OPERATIONAL_CANARY_20260814]].

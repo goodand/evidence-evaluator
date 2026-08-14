@@ -161,5 +161,30 @@ Retrieval, and Reconstruction passed.
 - attempt 5 result: `a219648e2814ac26b9c9156b8e38a062195aa4795655fb7d98208a1ba83ae4a3`
 - attempt 5 MCP audit: `f82b0b98fc96b1a466b3f9b5d8c519af4954f9160166f6887f8e417d7be4c18f`
 
-The development screen has not run. Requalification establishes current
-transport operability only and is excluded from factorial arm estimates.
+At attempt 5, the development screen had not run. Requalification establishes
+current transport operability only and is excluded from factorial arm
+estimates.
+
+## Development screen
+
+The preregistered 16-cell screen completed with zero invalid runs. Dynamic
+improved three paired cases and regressed none, so the mechanical screen gate
+selected `FULL_2X2`. The append-only receipt digest is
+`40027887b71d7bc23b20bb7b397233c4a9c492440f6ee3a2c9dc934b995f6568`
+and was pinned separately in commit `21e2f2a`. The public scorer then
+reverified the freeze, pin, receipt, all cells, and summary.
+
+This is development evidence, not held-out performance. The run stopped after
+the receipt as preregistered; no held-out cell has been executed yet.
+
+Attempt 6 then tested the updated handoff with a fresh Luna subject. Its first
+search call failed before reaching the MCP server, the retry succeeded, and
+the run remained within the six-call budget. Successful provider calls exactly
+matched the server audit, while the failed call stayed separately visible.
+The subject recovered `SCREEN_COMPLETE_CONFIRM_PINNED`,
+`RUN_HELD_OUT_FULL_2X2_CONFIRM`, and all three stop codes. All three evaluation
+layers passed.
+
+- attempt 6 result: `8a1688587f141b364665d4edaec8b3d7a5c6cc425fd568b20b4889380a530cfc`
+- attempt 6 MCP audit: `681f0ff3615ea6241380d373384feda8f240a490378b92431f5692eeffdaa1a0`
+- provider attempts: 5 total, including 1 failed search; server-audited calls: 4
