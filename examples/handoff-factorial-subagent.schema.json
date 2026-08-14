@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "candidate_paths", "read_ranges", "search_trace", "uncertainty"],
+  "properties": {
+    "contract_version": {"type": "string", "const": "evidence-subagent-v1"},
+    "candidate_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "read_ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "start", "end"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "start": {"type": "integer", "minimum": 1},
+          "end": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "search_trace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "query_or_path", "result_paths"],
+        "properties": {
+          "action": {"type": "string", "enum": ["search", "follow_link", "read_candidate", "expand_candidates"]},
+          "query_or_path": {"type": "string"},
+          "result_paths": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "uncertainty": {"type": "string"}
+  }
+}

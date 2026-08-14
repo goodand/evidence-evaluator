@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "cases"],
+  "properties": {
+    "contract_version": {"type": "string", "const": "handoff-factorial-curator-draft-v1"},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["split", "case", "gold", "files", "mutation"],
+        "properties": {
+          "split": {"type": "string", "enum": ["development", "held_out"]},
+          "case": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["contract_version", "id", "query", "condition", "difficulty", "handoff_path"],
+            "properties": {
+              "contract_version": {"type": "string", "const": "evidence-case-v1"},
+              "id": {"type": "string", "minLength": 1},
+              "query": {"type": "string", "minLength": 1},
+              "condition": {"type": "string", "enum": ["direct-handoff"]},
+              "difficulty": {"type": "string", "enum": ["zero-overlap-graph-only", "query-reformulation-only", "stale-replica", "dated-or-same-basename", "pool-outside-output-k", "multi-source-reconstruction", "natural-no-gold", "wrong-vault-no-gold"]},
+              "handoff_path": {"type": "string", "minLength": 1}
+            }
+          },
+          "gold": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["contract_version", "case_id", "handoff_path", "expected_paths", "critical_paths", "expected_authority", "permitted_authority_paths", "claims", "is_absent", "current_state_terms", "next_action_terms", "stop_condition_terms", "forbidden_terms", "safety_forbidden_terms"],
+            "properties": {
+              "contract_version": {"type": "string", "const": "evidence-gold-v1"},
+              "case_id": {"type": "string", "minLength": 1},
+              "handoff_path": {"type": "string", "minLength": 1},
+              "expected_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "critical_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "expected_authority": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "permitted_authority_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "claims": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["claim_id", "support_ranges"],
+                  "properties": {
+                    "claim_id": {"type": "string", "minLength": 1},
+                    "support_ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["path", "start", "end"],
+                        "properties": {
+                          "path": {"type": "string", "minLength": 1},
+                          "start": {"type": "integer", "minimum": 1},
+                          "end": {"type": "integer", "minimum": 1}
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "is_absent": {"type": "boolean"},
+              "current_state_terms": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+              "next_action_terms": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+              "stop_condition_terms": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+              "forbidden_terms": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+              "safety_forbidden_terms": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "content"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "content": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "mutation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "find", "replace", "expected_effect"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "find": {"type": "string", "minLength": 1},
+              "replace": {"type": "string"},
+              "expected_effect": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

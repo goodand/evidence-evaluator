@@ -29,13 +29,12 @@ good extraction candidate rather than a rewrite target:
 | Engine | `contract.py`, `evaluator.py`, `runner.py`, `providers.py`, `subject_tool.py`, `mcp_bridge.py` | — |
 | Schema | The case/gold/trace JSON contract (generic evidence-gathering vocabulary) | — |
 | Data | — | `public_cases/cases.json`, `hidden_gold/gold.json`, the actual corpus, `docs/HANDOFF.md` |
-| Protocol machinery | — | `run_live_phase_c.py`'s qualification gating, `FROZEN_SURFACE_FILES`, the paid-run refusal guards, `PREREGISTRATION.md` |
+| Protocol machinery | Portable staged factorial runner and freeze receipt | Source-specific primary authorization and safety-audit governance |
 
-The right-hand column is research-protocol machinery specific to that one
-experiment's risk management (should *this* paid model call happen right
-now, given *this* repo's frozen-surface pins) — not a generic evaluator
-concept. Don't expect to find it here; wire your own gating around the
-engine below if you need it.
+The portable factorial runner added here is narrower than the source
+experiment: it compares handoff search workflow and retrieval-helper use.
+Source-specific primary authorization and safety-audit governance remain
+outside this package.
 
 ## Obsidian vault retrieval
 
@@ -151,6 +150,15 @@ artifacts are ignored by Git. See
 [`docs/HANDOFF_MCP_CANARY.md`](docs/HANDOFF_MCP_CANARY.md) for the contract,
 failure interpretation, and acceptance checks.
 
+### Staged workflow/subagent factorial
+
+`evidence-handoff-factorial` compares fixed recall-first search, dynamic
+action choice, and a retrieval-only helper through the host-owned MCP action
+runtime. The six-case canary remains transport qualification and is not reused
+as arm evidence. See
+[`docs/HANDOFF_FACTORIAL_V2.md`](docs/HANDOFF_FACTORIAL_V2.md) for the frozen
+design, commands, and current unrun status.
+
 ### Obsidian CLI and permission lanes
 
 The filesystem graph is always available. Obsidian CLI graph expansion is
@@ -196,7 +204,7 @@ CLI error disappear.
   validators' control flow beyond membership checks, so add or drop entries
   for your own setup freely.
 
-## Layout and why imports are flat
+## Layout and import modes
 
 ```
 evidence_evaluator/
@@ -206,43 +214,38 @@ evidence_evaluator/
   providers.py      Claude CLI / Codex CLI (MCP bridge) process adapters
   subject_tool.py   the socket client a subject calls (via Bash, or via...)
   mcp_bridge.py     ...this stdio MCP tool, for a Codex subject
+  factorial_runtime.py host-owned static/dynamic action state
+  factorial_design.py  split, freeze, qualification, and paired scoring
+  factorial.py         staged experiment CLI
 tests/
   test_pipeline.py  end-to-end: build a corpus, run a scripted controller,
                      score the trace -- proves the modules still work
                      together after extraction, not just that they import
 ```
 
-The modules import each other with flat names (`from contract import ...`),
-not `evidence_evaluator.contract`. This is deliberate, not an oversight:
-`evaluator.py` re-executes **itself** as a subprocess
+The modules support normal package imports. `evaluator.py` retains a direct
+script fallback because it re-executes **itself** as a subprocess
 (`python3 -B -E -P -I -X pycache_prefix=<throwaway>`) to verify its own
 source hasn't been patched before scoring anything with it — see that
 module's docstring for why this matters and why the check has to run inside
-the child, not the parent. That subprocess launches as a bare script, so it
-needs `contract.py` sitting next to it on a flat `sys.path`, which package-
-relative imports would not survive. `pyproject.toml` exists for versioning
-and dependency metadata, not because `pip install`-ing this makes
-`evidence_evaluator.contract` importable in the usual sense — add the
-`evidence_evaluator/` directory itself to `sys.path`:
+the child, not the parent. The fallback finds `contract.py` next to the
+directly executed evaluator. Installed and checkout users should import the
+package normally:
 
 ```python
-import sys
-sys.path.insert(0, "/path/to/evidence-evaluator/evidence_evaluator")
-from contract import CASE_VERSION, GOLD_VERSION
-from runner import Corpus, run_case
-from evaluator import evaluate
+from evidence_evaluator.contract import CASE_VERSION, GOLD_VERSION
+from evidence_evaluator.runner import Corpus, run_case
+from evidence_evaluator.evaluator import evaluate
 ```
 
 ## Quickstart
 
 ```python
-import sys
 from pathlib import Path
 
-sys.path.insert(0, "evidence-evaluator/evidence_evaluator")
-from contract import CASE_VERSION, GOLD_VERSION
-from runner import Corpus, run_case
-from evaluator import evaluate
+from evidence_evaluator.contract import CASE_VERSION, GOLD_VERSION
+from evidence_evaluator.runner import Corpus, run_case
+from evidence_evaluator.evaluator import evaluate
 
 corpus = Corpus(Path("your/corpus/docs"))
 

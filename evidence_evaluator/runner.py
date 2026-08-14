@@ -35,9 +35,14 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from contract import (ACTIONS, SUBAGENT_VERSION, TERMINAL_ACTIONS,
-                      TRACE_VERSION, ContractError, validate_subagent_output,
-                      validate_trace)
+try:  # Package import in normal use; fallback keeps direct script execution.
+    from .contract import (ACTIONS, SUBAGENT_VERSION, TERMINAL_ACTIONS,
+                           TRACE_VERSION, ContractError,
+                           validate_subagent_output, validate_trace)
+except ImportError:  # pragma: no cover - exercised only by direct script use
+    from contract import (ACTIONS, SUBAGENT_VERSION, TERMINAL_ACTIONS,
+                          TRACE_VERSION, ContractError,
+                          validate_subagent_output, validate_trace)
 
 WORD = re.compile(r"[a-z0-9]+")
 _LINK = re.compile(r"\[[^\]]*\]\(([^)#]+)\)")

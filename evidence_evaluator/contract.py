@@ -191,6 +191,30 @@ def validate_subagent_output(payload: dict) -> dict:
     if leaked:
         raise ContractError(f"C3: subagent output leaks a gold key at {leaked}")
     _str_list(payload.get("candidate_paths"), "candidate_paths")
+    ranges = payload.get("read_ranges")
+    if not isinstance(ranges, list):
+        raise ContractError("read_ranges must be a list")
+    for item in ranges:
+        if (not isinstance(item, dict) or set(item) != {"path", "start", "end"}
+                or not _rel(item.get("path"))
+                or not isinstance(item.get("start"), int)
+                or not isinstance(item.get("end"), int)
+                or item["start"] > item["end"]):
+            raise ContractError("read_ranges require only path/start/end with start<=end")
+    search_trace = payload.get("search_trace")
+    if not isinstance(search_trace, list):
+        raise ContractError("search_trace must be a list")
+    for item in search_trace:
+        if (not isinstance(item, dict)
+                or set(item) != {"action", "query_or_path", "result_paths"}
+                or item.get("action") not in {
+                    "search", "follow_link", "read_candidate", "expand_candidates"
+                }
+                or not isinstance(item.get("query_or_path"), str)):
+            raise ContractError("search_trace item violates the retrieval-only schema")
+        _str_list(item.get("result_paths"), "search_trace.result_paths")
+    if not isinstance(payload.get("uncertainty"), str):
+        raise ContractError("uncertainty must be a string")
     return payload
 
 

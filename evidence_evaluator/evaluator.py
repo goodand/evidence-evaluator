@@ -37,9 +37,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from contract import (FAILURE_CODES, ContractError,  # noqa: E402
-                      find_forbidden_key, validate_case, validate_gold,
-                      validate_trace)
+try:  # Package import in normal use; fallback keeps the clean-judge script.
+    from .contract import (FAILURE_CODES, ContractError, find_forbidden_key,
+                           validate_case, validate_gold, validate_trace)
+except ImportError:  # pragma: no cover - clean judge executes this file directly
+    from contract import (FAILURE_CODES, ContractError, find_forbidden_key,
+                          validate_case, validate_gold, validate_trace)
 
 EXPECTED_RECALL_FLOOR = 0.95
 

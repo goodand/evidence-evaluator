@@ -7,7 +7,9 @@
 
 **세 MCP 도구는 동작하며, 동결한 zero-context confirmatory 6문항은 6/6
 통과했다.** Runtime, Retrieval, Reconstruction을 분리해 측정했고 실행 무효는
-0건이다. 공개 결과는
+0건이다. 이 결과를 qualification으로만 사용하는 단계형 2x2 검색 실험도
+구현·동결했으며 아직 subject run은 하지 않았다. 설계 정본은
+[`HANDOFF_FACTORIAL_V2.md`](HANDOFF_FACTORIAL_V2.md)다. 공개 qualification 결과는
 [`HANDOFF_CONFIRMATORY_RESULT_20260814.md`](HANDOFF_CONFIRMATORY_RESULT_20260814.md)에
 있다. 아래의 실제 Vault 2/5 결과는 2026-08-12 개발 기준선이며 최신 confirmatory
 결과와 혼동하지 마라.
@@ -16,7 +18,7 @@
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator
-python3 -m pytest tests/ -q                        # 74 passed 여야 한다
+python3 -m pytest tests/ -q                        # 현재 기대: 104 passed
 python3 -m pytest tests/test_v01_tool_contract.py -q  # 12 passed — 실제 MCP 프로세스
 ```
 
@@ -34,10 +36,10 @@ v0.1 계약         12 passed  (stdio MCP 서버 프로세스에서 검증)
 
 ## 2. 이 저장소가 무엇인가
 
-**무맥락 agent가 Markdown 코퍼스에서 필요한 문서를 찾아낼 수 있는가**를 실험하기
-위한 검색 도구다. 평가 플랫폼이 아니다.
+**무맥락 agent가 Markdown 코퍼스에서 handoff와 근거를 찾아 작업 상태·다음 행동을
+복구할 수 있는가**를 실험하는 검색 도구와 최소 평가 실행기다.
 
-v0.1의 범위는 **MCP 도구 세 개**뿐이다:
+검색 표면은 **MCP 도구 세 개**뿐이다:
 
 | 도구 | 하는 일 |
 |---|---|
@@ -45,8 +47,8 @@ v0.1의 범위는 **MCP 도구 세 개**뿐이다:
 | `vault_read` | canonical Markdown 경로의 **범위 제한** 읽기 |
 | `vault_backlinks` | 이 문서로 들어오는 링크. CLI가 답하면 live, 아니면 filesystem |
 
-**범위 밖(확장하지 마라)**: qualification, safety audit, ledger, reviewer
-isolation, release attestation, GraphRAG, neural reranker.
+**범위 밖(확장하지 마라)**: repository patch 평가, safety audit, primary 승인
+ledger, reviewer isolation, release attestation, GraphRAG, neural reranker.
 
 ## 3. git 상태
 

@@ -16,6 +16,7 @@ dev = ["pytest"]
 evidence-vault = "evidence_evaluator.retrieval.cli:main"
 evidence-vault-mcp = "evidence_evaluator.retrieval.mcp_server:main"
 evidence-handoff-canary = "evidence_evaluator.handoff_canary:main"
+evidence-handoff-factorial = "evidence_evaluator.factorial:main"
 
 [build-system]
 requires = ["setuptools>=68"]

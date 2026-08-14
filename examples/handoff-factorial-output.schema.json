@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version", "case_id", "arm", "terminal_action", "answer_text",
+    "claims", "current_state", "next_action", "stop_conditions",
+    "recommended_actions", "uncertainties", "declared_absent"
+  ],
+  "properties": {
+    "contract_version": {"type": "string", "const": "handoff-factorial-answer-v1"},
+    "case_id": {"type": "string", "minLength": 1},
+    "arm": {"type": "string", "enum": ["S_STATIC", "S_DYNAMIC", "R_STATIC", "R_DYNAMIC"]},
+    "terminal_action": {"type": "string", "enum": ["answer", "abstain"]},
+    "answer_text": {"type": "string"},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id", "claim", "support"],
+        "properties": {
+          "claim_id": {"type": "string", "minLength": 1},
+          "claim": {"type": "string"},
+          "support": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "start", "end"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "start": {"type": "integer", "minimum": 1},
+                "end": {"type": "integer", "minimum": 1}
+              }
+            }
+          }
+        }
+      }
+    },
+    "current_state": {"type": "string"},
+    "next_action": {"type": "string"},
+    "stop_conditions": {"type": "array", "items": {"type": "string"}},
+    "recommended_actions": {"type": "array", "items": {"type": "string"}},
+    "uncertainties": {"type": "array", "items": {"type": "string"}},
+    "declared_absent": {"type": "boolean"}
+  }
+}
