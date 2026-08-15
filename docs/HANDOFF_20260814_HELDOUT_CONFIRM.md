@@ -1,7 +1,7 @@
 ---
 title: Fresh Session Handoff - Held-out Factorial Confirm
 date: 2026-08-14
-status: active-handoff
+status: blocked-before-confirm
 scope: handoff-retrieval-factorial-v2
 tags:
   - doc/handoff
@@ -35,13 +35,15 @@ main
    복구를 개선하는가?
 2. retrieval-only helper(subagent)가 같은 복구를 개선하는가?
 
-현재 상태 코드는 `SCREEN_COMPLETE_CONFIRM_PINNED`다. development screen은
+현재 상태 코드는 원래 `SCREEN_COMPLETE_CONFIRM_PINNED`였지만, 이 handoff 검증에서
+confirm 전 차단 결함이 발견되어 현재 실행 상태는 `BLOCKED_BEFORE_CONFIRM`이다.
+development screen은
 16/16 valid였고, `S_DYNAMIC`은 세 paired case를 개선했으며 회귀, false absence,
 premature stop은 모두 0이었다. 따라서 gate는 `FULL_2X2`를 선택했다.
 
 이는 **development evidence**일 뿐이다. held-out 성능, helper 효과, interaction은
-아직 측정하지 않았다. 다음에 허용된 행동은 정확히
-`RUN_HELD_OUT_FULL_2X2_CONFIRM`이다.
+아직 측정하지 않았다. `RUN_HELD_OUT_FULL_2X2_CONFIRM`은 아래 차단 결함을 해결하고
+새 동결 절차를 완료하기 전까지 실행하면 안 된다.
 
 신뢰 기준값:
 
@@ -116,23 +118,25 @@ python3 -m evidence_evaluator.factorial score \
   --freeze private_eval/handoff-factorial-v2/freeze.json
 ```
 
-기대값:
+현재 검증 결과:
 
-- pytest: 현재 Codex 환경에서 `113 passed, 6 skipped`. skip은 host-only 또는
+- pytest: 현재 Codex 환경에서 `112 passed, 6 skipped`. skip은 host-only 또는
   optional dependency 경계일 수 있으므로, 새 세션은 숫자를 추정하지 말고 skip
   사유가 기존 것인지 확인한다.
 - transport receipt verify: `PASS`, 6/6 accepted, invalid 0
-- freeze verify: `PASS`, factorial freeze digest 일치
-- screen score: `FULL_2X2`, 16-cell screen receipt digest 일치
+- freeze verify: **FAIL**, `factorial inputs or harness surface drifted`
+- screen score: freeze stale로 실행되지 않음
 
-하나라도 실패하면 **confirm을 실행하지 않는다**. 실패 출력, `git status`, 생성된
+하나라도 실패하면 **confirm을 실행하지 않는다**. 이번 검증에서 실제로 이 조건이
+발동했다. 실패 출력, `git status`, 생성된
 새 artifact 이름만 기록한다. freeze/receipt를 재생성하거나 code를 고쳐 실패를
 없애지 않는다. 이 경우 다음 행동은 원인 분류와 별도 승인이지 held-out 재시도가
 아니다.
 
-## 5. Held-out confirm 실행
+## 5. Held-out confirm 실행 — 현재 차단
 
-preflight가 모두 PASS일 때만 다음 한 명령을 실행한다.
+현재는 다음 명령을 실행하지 않는다. 동결면 밖에서 scorer를 고치거나, 기존 screen
+receipt를 재사용한 채 confirm을 강행하지 않는다.
 
 ```bash
 python3 -m evidence_evaluator.factorial confirm \
@@ -141,7 +145,8 @@ python3 -m evidence_evaluator.factorial confirm \
   --output-dir results/handoff-factorial-v2
 ```
 
-이 명령은 held-out 8 cases x 4 arms x 3 replicates, 총 **96 subject cells**를
+이 명령은 차단 결함을 해결하고 새 freeze/screen authorization을 완료한 뒤에만
+held-out 8 cases x 4 arms x 3 replicates, 총 **96 subject cells**를
 append-only로 만든다. retrieval arm은 case/replicate마다 helper를 한 번 실행하므로
 **24 helper provider calls**와 helper artifact가 추가된다.
 실행이 길어도 process를 강제 종료하거나 같은 output path로 재실행하지 않는다.
@@ -183,6 +188,13 @@ handoff와 canonical evidence authority를 같은 batch에서 함께 갱신한�
 
 ## 7. 실패와 잔여 위험의 처리
 
+이번 검증에서 추가로 확인된 결함은 `score_directory()`의 cell glob이
+`confirm-HOLD-01-r1-helper.json` 같은 helper artifact까지 cell matrix에 포함할 수
+있다는 점이다. 이 결함은 confirm 후 score를 실패시킬 수 있다. 그러나
+`factorial.py`가 frozen execution surface이므로, held-out 전 수정하면 screen과
+qualification을 다시 수행해야 한다. 따라서 이것은 **현재 confirm blocker**이며,
+이 handoff에서는 수정했다고 주장하지 않는다.
+
 `C-I28`은 current transport receipt에 separate trusted expected digest verifier가
 없는 residual이다. 이것을 held-out 실행 전에 고치면 frozen surface와 screen을
 무효화해 development outcome 뒤 tuning이 된다. 따라서 이번 세션에서는 기록만 하고
@@ -197,7 +209,8 @@ artifact를 읽을 수 있으면 읽기 전용 관측으로 진행하고, provid
 
 이 세션의 완료는 아래 둘 중 하나다.
 
-1. preflight PASS, 96-cell confirm complete, confirm score PASS, 그리고 새로운
+1. scorer 결함을 별도 승인된 변경으로 해결하고 새 freeze/screen 절차를 완료한 뒤,
+   preflight PASS, 96-cell confirm complete, confirm score PASS, 그리고 새로운
    상태 handoff가 artifact evidence와 backlink로 연결됨.
 2. preflight 또는 runtime block을 변경 없이 재현하고, 원인과 보존된 artifacts를
    next-action handoff에 기록함.

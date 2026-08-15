@@ -105,15 +105,6 @@ def _build_stage_receipt(output_dir: Path, stage: str) -> dict[str, Any]:
     return {**unsigned, "receipt_digest": canonical_digest(unsigned)}
 
 
-def _stage_cell_paths(output_dir: Path, stage: str) -> set[Path]:
-    """Return cell artifacts while retaining helpers for separate validation."""
-    excluded = {f"{stage}-summary.json", f"{stage}-receipt.json"}
-    return {
-        path for path in output_dir.glob(f"{stage}-*.json")
-        if path.name not in excluded and not path.name.endswith("-helper.json")
-    }
-
-
 def _verify_stage_receipt(
     output_dir: Path, stage: str, expected_digest: str | None
 ) -> dict[str, Any]:
@@ -768,7 +759,7 @@ def score_directory(
         output_dir / f"{stage}-{case_id}-{arm}-r{replicate}.json"
         for replicate in replicates for case_id in case_ids for arm in arms
     }
-    actual_paths = _stage_cell_paths(output_dir, stage)
+    actual_paths = set(output_dir.glob(f"{stage}-*-*-r*.json"))
     if actual_paths != expected_paths:
         raise DesignError(f"{stage} artifact matrix is incomplete or contains extras")
     rows = []
