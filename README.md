@@ -126,6 +126,34 @@ Claude Code can use the same launcher from a project-scope `.mcp.json`. Both
 clients must point to this main checkout, not a temporary `.claude/worktrees`
 path.
 
+### Claude Desktop
+
+Claude Desktop can run this MCP server over the same stdio transport as any
+other client -- verified end-to-end (`vault_search`/`vault_read`/
+`vault_backlinks`) on macOS. Add it to
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "evidence-vault-mcp": {
+      "command": "/absolute/path/to/a/launcher/script",
+      "args": []
+    }
+  }
+}
+```
+
+If you point this at a `pip install`-generated `evidence-vault-mcp` console
+script, its shebang already pins the install-time interpreter and there is
+nothing further to do. If instead you point it at a raw `python3 -m
+evidence_evaluator.retrieval.mcp_server` wrapper run from a checkout, pin the
+interpreter explicitly rather than relying on `python3` resolving from PATH:
+a GUI app launches subprocesses with a minimal `PATH` that can resolve
+`python3` to one without the `mcp` package installed (confirmed 2026-08-15).
+Restart Claude Desktop after any config change -- it does not pick up a
+newly added server mid-session.
+
 ### Zero-context handoff canary
 
 The one-case canary starts a fresh ephemeral Codex subject with user config,
