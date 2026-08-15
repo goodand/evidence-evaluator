@@ -52,6 +52,23 @@ else:
     raise ValueError(
         f"VAULT_BACKLINKS_BACKEND must be 'harness' or 'evidence', got {BACKLINKS_BACKEND!r}")
 
+# Independent of which live backend is selected above: when the live CLI is
+# unavailable, fall back to evidence-evaluator's broader filesystem scan
+# rather than failing outright -- ALWAYS labeled as degraded (see
+# filesystem_fallback_backlinks's own docstring for why this is not a
+# live-equivalent answer: 50 vs 5 real entries for the same query, measured
+# 2026-08-15). On by default per an explicit 2026-08-15 decision, made after
+# that exact tradeoff was measured and shown: prefer a clearly-labeled,
+# broader answer over an outright failure. Set
+# VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0 to go back to pure live-only,
+# no-fallback behavior (the original DO-NOT-BUILD-derived contract).
+FILESYSTEM_FALLBACK_ENABLED = os.environ.get(
+    "VAULT_BACKLINKS_FILESYSTEM_FALLBACK", "1") not in {"0", "false", "False"}
+if FILESYSTEM_FALLBACK_ENABLED:
+    from obsidian_backend_evidence import filesystem_fallback_backlinks
+else:
+    filesystem_fallback_backlinks = None
+
 # v2 (2026-08-10): `total`'s meaning changed from "length of the returned
 # (possibly truncated) list" to "real count before truncation", and a new
 # `returned_count` field was added -- a breaking change for any consumer
@@ -212,11 +229,31 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
                 "out for this call."),
         })
 
+    backend_used = "live"
     try:
         raw = fetch_backlinks(vault.root, vault.obsidian_vault_name, clean_path)
     except ObsidianUnavailable as exc:
-        return _error_result(vault_id, clean_path, f"live backend unavailable: {exc}",
-                             review_checks=review_checks or None)
+        fallback_paths = (
+            filesystem_fallback_backlinks(vault.root, clean_path)
+            if FILESYSTEM_FALLBACK_ENABLED and filesystem_fallback_backlinks is not None
+            else None
+        )
+        if fallback_paths is None:
+            return _error_result(vault_id, clean_path, f"live backend unavailable: {exc}",
+                                 review_checks=review_checks or None)
+        raw = [{"file": item} for item in fallback_paths]
+        backend_used = "filesystem_fallback"
+        review_checks.append({
+            "code": "FILESYSTEM_FALLBACK_USED",
+            "required_action": (
+                f"Live Obsidian CLI was unavailable ({exc}); this result came from "
+                f"a broader filesystem scan instead, not a live answer. That scan "
+                f"counts a filename mention inside a code span or wikilink the same "
+                f"as a real indexed link -- it can return substantially MORE entries "
+                f"than a live answer would (measured 2026-08-15: 50 vs 5 for the "
+                f"same real query). Treat `backlinks`/`total` here as lower-precision "
+                f"evidence, not a live-equivalent count."),
+        })
 
     kept: list[dict] = []
     # Counted per reason, not lumped together. A single `dropped` total made
@@ -309,7 +346,7 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
 
     return {
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": clean_path,
-        "backend_used": "live", "backlinks": returned, "total": total_available,
+        "backend_used": backend_used, "backlinks": returned, "total": total_available,
         "returned_count": len(returned),
         # `dropped_out_of_scope` now means exactly what it says -- only the
         # vault-root failures. `dropped_by_reason` carries the full picture

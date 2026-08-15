@@ -48,12 +48,13 @@ if str(_EVIDENCE_DIR) not in sys.path:
     sys.path.insert(0, str(_EVIDENCE_DIR))
 
 try:
-    from evidence_evaluator.retrieval.corpus import CanonicalPath
+    from evidence_evaluator.retrieval.corpus import CanonicalPath, VaultCorpus
     from evidence_evaluator.retrieval.obsidian import ObsidianCliBackend
     from evidence_evaluator.retrieval.profile import VaultProfile
 except ImportError as exc:  # pragma: no cover -- environment-dependent
     CanonicalPath = None
     ObsidianCliBackend = None
+    VaultCorpus = None
     VaultProfile = None
     _IMPORT_ERROR = exc
 else:
@@ -101,3 +102,32 @@ def confirm_active_vault(vault_root: Path, *, backend=None) -> str:
     status on a missing check.
     """
     return "unknown"
+
+
+def filesystem_fallback_backlinks(vault_root: Path, path: str) -> list[str] | None:
+    """Broader, lower-precision backlink scan for when the live CLI is
+    unavailable -- called ONLY from `contracts.py`'s own fallback branch,
+    never silently in place of a live answer. `None` means even this
+    couldn't answer (path not found in this vault's own inventory either);
+    the caller must not treat that the same as "zero backlinks".
+
+    THIS IS NOT A DROP-IN FOR THE LIVE ANSWER. It counts a filename mention
+    inside a code span (`` `CLAUDE.md` ``) the same as a real wikilink --
+    `evidence_evaluator.retrieval.corpus`'s own `FILE_MENTION` regex is
+    intentionally permissive, built for a different question ("what related
+    documents exist") than this server's ("what did Obsidian's graph index
+    right now"). Measured 2026-08-15 on the real `project-in-progress` vault:
+    `CLAUDE.md` returned 50 entries this way against 5 from the live CLI --
+    a caller that mistook this for a live-equivalent count would be
+    wrong by 10x, not a rounding difference. `contracts.py` must always mark
+    a result from this path with `backend_used: "filesystem_fallback"` and a
+    `FILESYSTEM_FALLBACK_USED` review_check -- never as `"live"`.
+    """
+    if VaultCorpus is None or VaultProfile is None:
+        return None
+    profile = VaultProfile(root=vault_root, obsidian_enabled=False)
+    corpus = VaultCorpus(profile)
+    canonical = corpus.canonicalize(path)
+    if canonical is None:
+        return None
+    return list(corpus.backlinks(canonical.relative))

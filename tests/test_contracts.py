@@ -124,12 +124,39 @@ def test_target_path_not_on_disk_is_refused_before_cli_call(vault, monkeypatch):
     assert calls == []
 
 
-def test_obsidian_unavailable_is_reported_not_swallowed(vault, monkeypatch):
+def test_obsidian_unavailable_falls_back_but_is_clearly_labeled(vault, monkeypatch):
+    """2026-08-15: a live CLI failure no longer means an outright failure --
+    it now falls back to evidence-evaluator's filesystem scan (default on).
+    'Not swallowed' still holds in the sense that matters: the caller is
+    NEVER told this is a live answer. `backend_used` says exactly which path
+    answered, and a FILESYSTEM_FALLBACK_USED review_check names the tradeoff
+    (broader, lower-precision) every time this path fires."""
     from obsidian_backend import ObsidianUnavailable
 
     def raise_unavailable(root, name, path):
         raise ObsidianUnavailable("obsidian CLI is not on PATH")
     monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["backend_used"] == "filesystem_fallback"
+    assert result["backlinks"] is not None
+    assert result["error"] is None
+    assert result["review_required"] is True
+    codes = {c["code"] for c in result["review_checks"]}
+    assert "FILESYSTEM_FALLBACK_USED" in codes
+
+
+def test_obsidian_unavailable_is_an_honest_failure_when_fallback_is_off(
+    vault, monkeypatch
+):
+    """The pre-2026-08-15 contract is still reachable: with the fallback
+    switched off, a live failure must not be silently answered from
+    anywhere else."""
+    from obsidian_backend import ObsidianUnavailable
+
+    def raise_unavailable(root, name, path):
+        raise ObsidianUnavailable("obsidian CLI is not on PATH")
+    monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+    monkeypatch.setattr(contracts, "FILESYSTEM_FALLBACK_ENABLED", False)
     result = contracts.query_backlinks("t1", "target.md", registry=vault)
     assert result["backend_used"] == "none"
     assert result["backlinks"] is None
