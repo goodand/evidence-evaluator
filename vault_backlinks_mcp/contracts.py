@@ -28,12 +28,29 @@ does not apply here.
 
 from __future__ import annotations
 
+import os
+
 from registry import RegistryError, VaultEntry, load_registry, resolve_vault
-from obsidian_backend import ObsidianUnavailable, confirm_active_vault, fetch_backlinks
 from security import (DEFAULT_FORBIDDEN_SEGMENTS, PathSecurityError,
                       find_basename_collisions, is_forbidden,
                       is_forbidden_resolved, is_symlink_under_root,
                       exists_under_root, validate_relative_path)
+
+# Backend selection for the CLI-transport layer only -- registry/security
+# above are unchanged either way. Default stays "harness" (current, tested
+# behavior); "evidence" opts into the evidence-evaluator-backed adapter,
+# which has a measured gap (see obsidian_backend_evidence.py's module
+# docstring: link counts default to 1, not the real per-file count) and is
+# not yet the default for that reason.
+BACKLINKS_BACKEND = os.environ.get("VAULT_BACKLINKS_BACKEND", "harness")
+if BACKLINKS_BACKEND == "evidence":
+    from obsidian_backend_evidence import (ObsidianUnavailable, confirm_active_vault,
+                                           fetch_backlinks)
+elif BACKLINKS_BACKEND == "harness":
+    from obsidian_backend import ObsidianUnavailable, confirm_active_vault, fetch_backlinks
+else:
+    raise ValueError(
+        f"VAULT_BACKLINKS_BACKEND must be 'harness' or 'evidence', got {BACKLINKS_BACKEND!r}")
 
 # v2 (2026-08-10): `total`'s meaning changed from "length of the returned
 # (possibly truncated) list" to "real count before truncation", and a new

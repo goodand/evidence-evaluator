@@ -23,7 +23,15 @@ class PathSecurityError(ValueError):
 # Extend this list per-deployment; it is intentionally small and explicit --
 # see `contract.py` in the evidence-evaluator package for the same
 # "explicit list, not a heuristic" choice and why.
-DEFAULT_FORBIDDEN_SEGMENTS = ("hidden_gold", ".git", "node_modules")
+#
+# Matches evidence_evaluator.retrieval.profile.DEFAULT_BLOCKED_PARTS (2026-08-15
+# gap found while designing the compatibility adapter: this list was missing
+# `private_eval`, `.hg`, `.svn`, `.pytest_cache`, and `__pycache__` relative to
+# that one -- no vault this server currently serves has those directories, so
+# it was never reproduced as a live leak, but the gap was real).
+DEFAULT_FORBIDDEN_SEGMENTS = ("hidden_gold", "private_eval", ".git", ".hg",
+                             ".svn", ".pytest_cache", "__pycache__",
+                             "node_modules")
 MAX_BASENAME_COLLISIONS = 20
 
 
