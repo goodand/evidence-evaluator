@@ -13,6 +13,10 @@ adopt the new profile-based service rather than importing source-harness
 internals. A compatibility adapter for an existing consumer such as
 `vault-backlinks-mcp` is a later, separately tested migration.
 
+The two current `vault_backlinks` surfaces do not have identical failure or
+authority semantics. See [[SEMANTIC_BOUNDARY_VAULT_BACKLINKS]] before designing
+that compatibility adapter.
+
 ## Boundary
 
 Moved into this repository:
