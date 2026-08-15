@@ -86,6 +86,7 @@ class VaultCorpus:
         self.warnings: list[str] = []
         self.documents: dict[str, VaultDocument] = {}
         self._alias_to_canonical: dict[str, str] = {}
+        self._symlink_aliases: set[str] = set()
         self._outgoing: dict[str, tuple[str, ...]] = {}
         self._backlinks: dict[str, tuple[str, ...]] = {}
         self._tokens: dict[str, list[str]] = {}
@@ -180,6 +181,7 @@ class VaultCorpus:
             item = by_absolute.get(target)
             if item is not None:
                 symlinks_by_digest[item.digest].append(alias)
+                self._symlink_aliases.add(alias)
 
         for digest, replicas in sorted(by_digest.items()):
             canonical = min(
@@ -230,6 +232,18 @@ class VaultCorpus:
             return None
         canonical = self._alias_to_canonical.get(normalized)
         return CanonicalPath(canonical) if canonical else None
+
+    def is_symlink_alias(self, relative_path: str) -> bool:
+        """Was this exact requested path a symlink resolved to another file?
+
+        Never treat a symlink as content authority (see
+        notes/audits/vault/symlink-vs-moc-2026-07-30.md, adopted hybrid #6):
+        `canonicalize()` already resolves it to the canonical physical path
+        silently. This lets a caller ALSO surface that resolution happened,
+        without changing what gets returned.
+        """
+        normalized = _safe_relative(relative_path)
+        return normalized is not None and normalized in self._symlink_aliases
 
     def resolve_graph_target(
         self,

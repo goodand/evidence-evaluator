@@ -553,3 +553,70 @@ def test_search_names_the_filesystem_fallback_when_the_cli_is_gone(tmp_path):
     out = svc.search("answer", output_k=4, candidate_pool_k=20)
     assert out["fallback_used"] == "filesystem"
     assert out["review_required"] is True
+
+
+def test_querying_a_symlink_path_signals_that_it_was_resolved(tmp_path):
+    """Symlink-alias signal for vault-backlinks-mcp adapter parity.
+
+    A symlink is never content authority (symlink-vs-moc-2026-07-30, adopted
+    hybrid #6) -- `canonicalize()` already resolves it silently. This proves
+    the caller can ALSO learn that resolution happened, without the answer
+    itself changing: same backlinks, same path, one extra warning.
+    """
+    vault = _vault(tmp_path)
+    (vault / "target-alias.md").symlink_to(vault / "target.md")
+    svc = _svc(vault)
+
+    direct = svc.backlinks("target.md", limit=10)
+    via_symlink = svc.backlinks("target-alias.md", limit=10)
+
+    assert via_symlink["path"] == direct["path"] == "target.md"
+    assert sorted(via_symlink["backlinks"]) == sorted(direct["backlinks"])
+    assert any("symlink" in w.casefold() for w in via_symlink["warnings"])
+    assert not any("symlink" in w.casefold() for w in direct["warnings"]), (
+        "poison test: the signal must NOT fire for a non-symlink query"
+    )
+    assert via_symlink["review_required"] is True
+
+
+def test_backlinks_only_issues_a_single_cli_call(tmp_path):
+    """`backlinks_only()` exists so a caller that never reads `links` doesn't
+    pay for the extra CLI round trip `neighbors()` always makes (one more
+    chance of a transient IPC failure for data that call site discards)."""
+    from evidence_evaluator.retrieval.corpus import CanonicalPath
+    from evidence_evaluator.retrieval.obsidian import ObsidianCliBackend
+    from evidence_evaluator.retrieval.profile import VaultProfile
+    import subprocess
+
+    calls = []
+
+    def fake_run(command, cwd, timeout):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, '[{"file": "hub.md"}]', "")
+
+    profile = VaultProfile(root=str(_vault(tmp_path)), vault_name="t")
+    backend = ObsidianCliBackend(profile, runner=fake_run)
+    result = backend.backlinks_only(CanonicalPath("target.md"))
+
+    assert result.backlinks == ("hub.md",)
+    assert result.available is True
+    assert len(calls) == 1, f"expected exactly one CLI call, got {len(calls)}"
+    assert calls[0][1] == "backlinks" and "links" not in calls[0][1:]
+
+
+def test_backlinks_only_reports_unavailable_on_cli_failure(tmp_path):
+    from evidence_evaluator.retrieval.corpus import CanonicalPath
+    from evidence_evaluator.retrieval.obsidian import ObsidianCliBackend
+    from evidence_evaluator.retrieval.profile import VaultProfile
+    import subprocess
+
+    def failing_run(command, cwd, timeout):
+        return subprocess.CompletedProcess(command, 1, "", "unable to find Obsidian")
+
+    profile = VaultProfile(root=str(_vault(tmp_path)), vault_name="t")
+    backend = ObsidianCliBackend(profile, runner=failing_run)
+    result = backend.backlinks_only(CanonicalPath("target.md"))
+
+    assert result.available is False
+    assert result.backlinks == ()
+    assert result.warnings

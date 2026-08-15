@@ -26,6 +26,15 @@ class ObsidianGraphResult:
     available: bool
 
 
+@dataclass(frozen=True)
+class ObsidianBacklinksResult:
+    """Result of a backlinks-only probe -- see `ObsidianCliBackend.backlinks_only`."""
+
+    backlinks: tuple[str, ...]
+    warnings: tuple[str, ...]
+    available: bool
+
+
 def parse_cli_output(output: str) -> Any:
     stripped = output.strip()
     if not stripped or stripped.casefold().startswith("no "):
@@ -86,30 +95,57 @@ class ObsidianCliBackend:
         warnings: list[str] = []
         successes = 0
         for key, subcommand in (("backlinks", "backlinks"), ("outgoing", "links")):
-            command = [self.profile.obsidian_binary, subcommand]
-            if self.profile.vault_name:
-                command.append(f"vault={self.profile.vault_name}")
-            command.append(f"path={path.relative}")
-            if subcommand == "backlinks":
-                command.extend(("counts", "format=json"))
-            result = self._call(command)
-            output = result.stdout.strip()
-            error = result.stderr.strip()
-            if result.returncode != 0 or _looks_like_error(output):
-                warnings.append(
-                    f"Obsidian {subcommand} unavailable for {path.relative}: "
-                    f"{error or output or 'command failed'}"
-                )
+            paths, warning = self._probe(path, subcommand, counts=subcommand == "backlinks")
+            if warning is not None:
+                warnings.append(warning)
                 values[key] = ()
                 continue
             successes += 1
-            values[key] = tuple(graph_paths(parse_cli_output(output)))
+            values[key] = paths or ()
         return ObsidianGraphResult(
             outgoing=values.get("outgoing", ()),
             backlinks=values.get("backlinks", ()),
             warnings=tuple(warnings),
             available=successes > 0,
         )
+
+    def backlinks_only(self, path: CanonicalPath) -> ObsidianBacklinksResult:
+        """Single-call variant: only `backlinks`, never `links`/`tags` too.
+
+        `neighbors()` always issues two CLI calls (`backlinks` and `links`)
+        because a graph walk needs both. A consumer that only ever reads
+        backlinks -- e.g. a live-only exact-path diagnostic tool -- pays for
+        a `links` call it never uses: one more chance of a transient IPC
+        failure for a result that call site discards. This exists so that
+        consumer does not have to reimplement the CLI invocation or output
+        parsing just to avoid the extra call.
+        """
+        paths, warning = self._probe(path, "backlinks", counts=True)
+        return ObsidianBacklinksResult(
+            backlinks=paths or (),
+            warnings=(warning,) if warning else (),
+            available=warning is None,
+        )
+
+    def _probe(
+        self, path: CanonicalPath, subcommand: str, *, counts: bool = False
+    ) -> tuple[tuple[str, ...] | None, str | None]:
+        """Run one CLI subcommand; `None` paths means the warning is set."""
+        command = [self.profile.obsidian_binary, subcommand]
+        if self.profile.vault_name:
+            command.append(f"vault={self.profile.vault_name}")
+        command.append(f"path={path.relative}")
+        if counts:
+            command.extend(("counts", "format=json"))
+        result = self._call(command)
+        output = result.stdout.strip()
+        error = result.stderr.strip()
+        if result.returncode != 0 or _looks_like_error(output):
+            return None, (
+                f"Obsidian {subcommand} unavailable for {path.relative}: "
+                f"{error or output or 'command failed'}"
+            )
+        return tuple(graph_paths(parse_cli_output(output))), None
 
     def _call(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         result = self._runner(command, self.profile.root, self.timeout)

@@ -170,6 +170,14 @@ class RetrievalService:
                 "inside this vault, or it is on the blocked list")
 
         warnings: list[str] = list(self.corpus.warnings)
+        # A symlink is never content authority (symlink-vs-moc-2026-07-30,
+        # adopted hybrid #6) -- `canonicalize` already resolved it silently.
+        # Surface that resolution happened, without changing the answer.
+        if self.corpus.is_symlink_alias(path):
+            warnings.append(
+                f"Queried path {path!r} is a symlink; resolved to canonical "
+                f"path {canonical.relative!r}."
+            )
         fallback_used: str | None = None
         found = list(self.corpus.backlinks(canonical.relative))
 
