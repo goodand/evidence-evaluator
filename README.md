@@ -299,6 +299,16 @@ project_root, host_control, run_name)`. Both:
 session transcripts and account config living outside the corpus you meant
 to expose — to your platform's process sandbox if you're not on macOS.
 
+Both adapters also depend on the host lane permitting Unix-domain sockets:
+the provider, `subject_tool.py`/`mcp_bridge.py`, and the host control channel
+all use the same `AF_UNIX` JSON protocol. A working `mcp` Python package does
+not imply that this capability is available. A managed Codex or Claude lane
+may deny socket creation or connection even when imports and the MCP server
+start successfully. Treat an `AF_UNIX` probe failure as `BLOCKED` for the live
+adapter test, not as a retrieval failure or an empty result. Record the
+provider, Python interpreter, MCP package version, and capability-probe result
+separately so host-lane and sandbox-lane outcomes are not conflated.
+
 `codex-mcp-cli` needs `fastmcp` installed in the interpreter that launches
 `mcp_bridge.py` (not in the evaluated subject's own environment): `pip
 install evidence-evaluator[codex-mcp]`.
