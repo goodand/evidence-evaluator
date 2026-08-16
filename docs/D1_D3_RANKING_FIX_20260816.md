@@ -1,7 +1,23 @@
 # D1/D3 — 순위 결함 수정 (2026-08-16)
 
-`docs/HANDOFF.md` §6에 증상만 기록돼 있던 D1a·D1b·D3를 고쳤다. 완료 조건 3번
-(실제 Vault 5문항 중 4건 이상 회수)이 **3/5 → 4/5**로 충족됐다.
+`docs/HANDOFF.md` §6에 증상만 기록돼 있던 D1a·D1b·D3를 다뤘다. **D1b는 고쳤고,
+D3는 고치지 못했다.**
+
+> ## ⚠️ 이 문서의 첫 판을 정정한다 (2026-08-16, 같은 날)
+>
+> 첫 판은 **"3/5 → 4/5, 완료 조건 3번 충족"**이라고 적었다. **틀렸다.**
+>
+> 그 4/5는 `graph_seed_k=4, max_turns=4`에서만 나온다. **도구 기본값**
+> (`graph_seed_k=12`)에서는 demotion을 켜도 **3/5**다. 실제 caller가 받는 것은
+> 기본값이므로, 완료 조건 3번은 **여전히 미충족**이다.
+>
+> 이걸 잡은 것은 내 재측정이 아니라 **Claude Desktop의 독립 실험**이다. Desktop이
+> 기본 파라미터로 같은 질의를 돌려 "symlink-vs-moc 파일이 직접 반환되지 않았다"고
+> 보고했고, 실제 MCP 서버로 재현해보니 Desktop이 맞았다.
+>
+> 특히 나쁜 실수인 이유: 이 저장소는 **`discovered_path_count`가 파라미터에 따라
+> 달라지니 두 수를 같은 측정으로 취급하지 말라**고 이미 `HANDOFF.md` §6에 적어
+> 뒀다. 그 주의를 내가 쓰고 내가 어겼다.
 
 ## 1. 무엇이 문제였나 — 실측
 
@@ -49,18 +65,47 @@ EVIDENCE_VAULT_DEMOTED_PREFIXES
 EVIDENCE_VAULT_EXCLUDED_GLOBS
 ```
 
-## 4. 측정 결과
+## 4. 측정 결과 — 파라미터를 명시한다
+
+**도구 기본값**(`output_k=8, candidate_pool_k=50, graph_seed_k=12,
+max_turns=6`) — 실제 caller가 받는 값:
 
 ```
-설정 없음                    3/5   C1 rank 2(archive 사본), C3 MISS
-demoted=archive/,notes/00-moc/   4/5   C1 rank 1(archive 아님), C3 HIT rank 3
-  + authority=…/docs/, notes/audits/  4/5   정본 신원은 정확, C1 rank 6
+설정 없음                        3/5   C1=HIT@2(archive 사본)  C3=MISS  C4=MISS
+demoted=archive/,notes/00-moc/   3/5   C1=HIT@1(archive 아님)  C3=MISS  C4=MISS
 ```
+
+**demotion이 기본값에서 실제로 한 일**: 회수 건수는 그대로고, C1이 **archive
+사본(rank 2)에서 현재 사본(rank 1)으로** 바뀌었다. 이건 D1b가 고쳐졌다는
+뜻이지만 **binary hit count는 움직이지 않는다.**
+
+### C3는 왜 파라미터를 타는가 (demotion ON, 실측)
+
+```
+graph_seed_k  max_turns   출력 순위   pool에 있나
+           4          4          3        True
+           4          6          3        True
+           8          4          5        True
+           8          6          5        True
+          12          4       MISS        True
+          12          6       MISS        True   <- 도구 기본값
+```
+
+`max_turns`는 무관하고 **`graph_seed_k`가 결정 변수**다. seed를 늘릴수록
+graph 채널에 이웃이 더 많이 들어와 symlink-vs-moc을 8칸 밖으로 밀어낸다.
+
+**모든 설정에서 `candidate_pool`에는 들어 있다.** 즉 D3는 여전히 "닿았는데
+순위에서 밀린다"이고, demotion으로는 해결되지 않았다.
 
 `~/.claude/scripts/run_obsidian_vault_mcp.sh`에 `demoted` 설정을 넣었다.
 
 ## 5. 정직하게 남기는 것
 
+- **완료 조건 3번(≥4/5)은 미충족이다.** 기본값에서 3/5. D1b는 고쳤고 D3는 못
+  고쳤다.
+- **D3의 다음 단계는 `graph_seed_k`다** — demotion이 아니다. seed 수가 늘수록
+  graph 채널이 출력 창을 잡아먹는다는 것까지는 실측했으나, 왜 그 문서가 특히
+  밀리는지는 **아직 원인을 확정하지 않았다.**
 - **C4는 여전히 MISS다.** top-4가 archive도 MOC도 아닌 `docs/feedback/*`이라
   강등으로 풀리지 않는다. 원인 미확정 — 별도 작업이다.
 - **`authority_prefixes`는 순위를 개선하지 않는다.** D1a(정본 신원)만 고친다.
