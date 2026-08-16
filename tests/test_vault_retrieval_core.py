@@ -605,18 +605,32 @@ def test_backlinks_only_issues_a_single_cli_call(tmp_path):
 
 
 def test_backlinks_only_reports_unavailable_on_cli_failure(tmp_path):
+    """Adversarial review 2026-08-15: asserting only `available is False` +
+    empty backlinks + truthy warnings let a hardcoded
+    `ObsidianBacklinksResult(available=False, warnings=("anything",))` that
+    never consults the runner pass unchanged. Assert the runner was actually
+    invoked and that the warning names the real failure, so the result has
+    to be derived from the CLI call rather than assumed."""
     from evidence_evaluator.retrieval.corpus import CanonicalPath
     from evidence_evaluator.retrieval.obsidian import ObsidianCliBackend
     from evidence_evaluator.retrieval.profile import VaultProfile
     import subprocess
 
+    calls = []
+
     def failing_run(command, cwd, timeout):
+        calls.append(command)
         return subprocess.CompletedProcess(command, 1, "", "unable to find Obsidian")
 
     profile = VaultProfile(root=str(_vault(tmp_path)), vault_name="t")
     backend = ObsidianCliBackend(profile, runner=failing_run)
     result = backend.backlinks_only(CanonicalPath("target.md"))
 
+    assert calls, "the CLI runner was never invoked"
+    assert calls[0][1] == "backlinks"
     assert result.available is False
     assert result.backlinks == ()
     assert result.warnings
+    # The warning must carry the actual failure detail, not a generic string.
+    assert "target.md" in result.warnings[0]
+    assert "unable to find Obsidian" in result.warnings[0]
