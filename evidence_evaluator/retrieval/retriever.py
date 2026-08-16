@@ -60,6 +60,59 @@ def reciprocal_rank_fusion(
     return ordered, dict(ranks)
 
 
+def graph_channel_order(
+    discovered_paths: list[str],
+    evidence: dict[str, list[dict[str, str]]],
+    depth: dict[str, int],
+    lexical_rank: dict[str, int],
+) -> list[str]:
+    """Order the graph channel by connection evidence, not discovery order.
+
+    WHY THIS EXISTS. `reciprocal_rank_fusion` scores a channel by POSITION in
+    the list it is handed. The graph channel used to be handed
+    `graph_order` -- append-on-first-sighting -- so a document's graph score
+    was decided by which seed happened to expand first, and nothing else.
+    Measured on a real 1,766-document vault: a document ranked bm25 #1 and
+    exact #2 (the best lexical match in the corpus) landed at graph position
+    183 and fell out of the top 8, beaten by a document with NO lexical match
+    at all sitting at graph position 35. Raising `graph_seed_k` made it
+    strictly worse (rank 4 -> 6 -> gone), because more seeds append more
+    neighbours ahead of it.
+
+    Ranked instead by, in order:
+
+    1. how many DISTINCT parents in this query's own walk link to it --
+       query-local, not the vault's global backlink count. A globally
+       popular page should not outrank a page this query's neighbourhood
+       actually converges on (Topic-Sensitive PageRank's argument).
+    2. shallower first -- a document two hops from a lexical seed is closer
+       evidence than one five hops out.
+    3. the best lexical standing among its parents -- a link from a strong
+       match is better evidence than a link from an unrelated document.
+    4. path, so the result is deterministic.
+
+    The multiplicity input was already being collected: `graph_evidence` is
+    appended OUTSIDE the `if neighbor not in graph_order` guard, so it holds
+    every distinct (seed, relation) that reached each path. Only the
+    discovery-ordered list was ever handed to the fusion step.
+
+    Design ruling and its literature basis (WebQuery's connectivity
+    re-ranking, Henzinger's query-dependent indegree, ObjectRank's authority
+    flow): docs/DESIGN_DECISION_D3_GRAPH_RANK_20260816.md.
+    """
+    worst_lexical = len(lexical_rank) + 1
+
+    def key(path: str) -> tuple[int, int, int, str]:
+        parents = {item["seed"] for item in evidence.get(path, ())}
+        best_parent = min(
+            (lexical_rank.get(parent, worst_lexical) for parent in parents),
+            default=worst_lexical,
+        )
+        return (-len(parents), depth.get(path, 0), best_parent, path)
+
+    return sorted(discovered_paths, key=key)
+
+
 class RecallFirstRetriever:
     def __init__(
         self,
@@ -93,6 +146,16 @@ class RecallFirstRetriever:
         graph_order: list[str] = []
         graph_frontier: list[str] = []
         graph_evidence: dict[str, list[dict[str, str]]] = defaultdict(list)
+        # Turn at which each path was first reached by the walk. Recoverable
+        # from `turns[i]["new_paths"]` after the fact, but the ranking below
+        # needs it while the walk is still running.
+        graph_depth: dict[str, int] = {}
+        # Best lexical standing of any document, used to weigh the PARENTS
+        # that link to a candidate: a link from a strong lexical match is
+        # better evidence than a link from an unrelated document.
+        lexical_rank = {path: index for index, path in enumerate(exact, start=1)}
+        for index, path in enumerate(bm25, start=1):
+            lexical_rank[path] = min(lexical_rank.get(path, index), index)
         warnings = list(self.corpus.warnings)
         turns = [
             {
@@ -158,8 +221,11 @@ class RecallFirstRetriever:
                             cumulative.append(neighbor)
                             graph_frontier.append(neighbor)
                             new_paths.append(neighbor)
+                        graph_depth.setdefault(neighbor, turn_number)
 
-            channels["graph"] = graph_order
+            channels["graph"] = graph_channel_order(
+                graph_order, graph_evidence, graph_depth, lexical_rank
+            )
             ranked, channel_ranks = reciprocal_rank_fusion(
                 channels, weights={"graph": 3.0}
             )

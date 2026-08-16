@@ -726,3 +726,119 @@ def test_a_coarse_authority_prefix_also_matches_nested_worktrees(tmp_path):
     precise = VaultProfile(root=tmp_path, authority_prefixes=("proj/docs/",))
     assert precise.authority_rank("proj/docs/a.md")[0] < \
         precise.authority_rank("proj/.worktrees/x/docs/a.md")[0]
+
+
+# --- D3: graph channel ranked by connection evidence (2026-08-16) ---------
+# Design ruling: docs/DESIGN_DECISION_D3_GRAPH_RANK_20260816.md
+
+def test_graph_channel_ranks_by_parent_count_not_discovery_order():
+    """The unit the whole fix turns on. `graph_channel_order` is handed a
+    discovery-ordered list and must NOT preserve that order when connection
+    evidence disagrees."""
+    from evidence_evaluator.retrieval.retriever import graph_channel_order
+    discovered = ["found-first.md", "found-later.md"]
+    evidence = {
+        "found-first.md": [{"seed": "a.md", "relation": "outgoing"}],
+        "found-later.md": [{"seed": "a.md", "relation": "outgoing"},
+                           {"seed": "b.md", "relation": "backlink"},
+                           {"seed": "c.md", "relation": "backlink"}],
+    }
+    depth = {"found-first.md": 2, "found-later.md": 2}
+    order = graph_channel_order(discovered, evidence, depth, {})
+    assert order[0] == "found-later.md", (
+        "three distinct parents must outrank one, regardless of which was "
+        "seen first"
+    )
+
+
+def test_graph_channel_prefers_shallower_when_parent_counts_tie():
+    from evidence_evaluator.retrieval.retriever import graph_channel_order
+    ev = {p: [{"seed": "a.md", "relation": "outgoing"}]
+          for p in ("far.md", "near.md")}
+    order = graph_channel_order(["far.md", "near.md"], ev,
+                                {"far.md": 5, "near.md": 2}, {})
+    assert order[0] == "near.md"
+
+
+def test_graph_channel_prefers_a_lexically_stronger_parent_on_a_tie():
+    """A link from a document the query actually matched is better evidence
+    than a link from an unrelated one."""
+    from evidence_evaluator.retrieval.retriever import graph_channel_order
+    ev = {"via-weak.md": [{"seed": "weak.md", "relation": "outgoing"}],
+          "via-strong.md": [{"seed": "strong.md", "relation": "outgoing"}]}
+    depth = {"via-weak.md": 2, "via-strong.md": 2}
+    order = graph_channel_order(["via-weak.md", "via-strong.md"], ev, depth,
+                                {"strong.md": 1, "weak.md": 40})
+    assert order[0] == "via-strong.md"
+
+
+def test_the_zero_overlap_answer_survives_in_the_output_not_just_discovery(tmp_path):
+    """Asserts the OUTPUT, which the neighbouring
+    `test_graph_frontier_beats_a_full_lexical_tail` does not: that one checks
+    only discovery (`turn["new_paths"]`) and never inspects
+    `retrieved_paths`, so it passes even when the answer is pushed out of the
+    output window entirely.
+
+    SCOPE, measured rather than assumed: this catches a LEXICAL-FIRST
+    ordering (staged ranking buries the answer at position
+    lexical_matches + 2, so it leaves the window here). It does NOT catch the
+    discovery-order graph channel that D3 fixed -- reverting that change
+    leaves this test green. Four synthetic fixtures were tried; none
+    reproduced the real vault's in/out flip, which needs that corpus's scale
+    and link topology. The regression guard for D3 is
+    `scripts/d3_ranking_gates.py` against the real vault. See
+    docs/DESIGN_DECISION_D3_GRAPH_RANK_20260816.md section 4.
+    """
+    (tmp_path / "deep").mkdir()
+    (tmp_path / "HANDOFF.md").write_text("unique entry [[bridge]]", encoding="utf-8")
+    (tmp_path / "bridge.md").write_text("neutral [[deep/authority]]",
+                                        encoding="utf-8")
+    (tmp_path / "deep" / "authority.md").write_text("zero lexical overlap",
+                                                    encoding="utf-8")
+    for i in range(30):
+        # Distinct bodies: byte-identical files collapse into one document via
+        # replica dedup, which silently defeated an earlier version of this.
+        (tmp_path / f"lexical-{i:03d}.md").write_text(
+            f"unique entry noise variant {i} filler-{i}", encoding="utf-8")
+
+    out = RetrievalService(
+        VaultProfile(root=tmp_path, obsidian_enabled=False)
+    ).search("unique entry", output_k=8, candidate_pool_k=50,
+             graph_seed_k=4, max_turns=4)
+    assert "deep/authority.md" in out["retrieved_paths"], (
+        "the answer shares no vocabulary with the query and is only reachable "
+        "through the graph -- if it leaves the output, this package has lost "
+        "the capability it exists for"
+    )
+
+
+def test_graph_rank_is_stable_as_seed_count_grows(tmp_path):
+    """Raising graph_seed_k must not knock the answer out of the output.
+
+    SCOPE, same caveat as the test above: on the real vault the old
+    discovery-order channel degraded monotonically here (rank 4 -> 6 -> gone
+    at seed 4/8/12), but this synthetic corpus is too small to reproduce
+    that -- the test stays green with the fix reverted. Kept as a smoke check
+    that seed count does not destabilise output at all; the real guard is
+    `scripts/d3_ranking_gates.py` gate 4."""
+    (tmp_path / "deep").mkdir()
+    (tmp_path / "HANDOFF.md").write_text("unique entry [[bridge]]", encoding="utf-8")
+    (tmp_path / "bridge.md").write_text("neutral [[deep/authority]]",
+                                        encoding="utf-8")
+    (tmp_path / "deep" / "authority.md").write_text("zero lexical overlap",
+                                                    encoding="utf-8")
+    for i in range(20):
+        (tmp_path / f"noise-{i:03d}.md").write_text(
+            f"unique entry noise variant {i} filler-{i}", encoding="utf-8")
+    svc = RetrievalService(VaultProfile(root=tmp_path, obsidian_enabled=False))
+
+    ranks = []
+    for seed_k in (2, 4, 8, 16):
+        out = svc.search("unique entry", output_k=8, candidate_pool_k=50,
+                         graph_seed_k=seed_k, max_turns=4)
+        r = next((i + 1 for i, p in enumerate(out["retrieved_paths"])
+                  if p == "deep/authority.md"), None)
+        ranks.append(r)
+    assert all(r is not None for r in ranks), (
+        f"answer dropped out of the output at some seed count: {ranks}")
+    assert max(ranks) - min(ranks) <= 4, f"rank swings with seed count: {ranks}"
