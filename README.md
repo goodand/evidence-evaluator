@@ -249,7 +249,38 @@ tests/
   test_pipeline.py  end-to-end: build a corpus, run a scripted controller,
                      score the trace -- proves the modules still work
                      together after extraction, not just that they import
+vault-backlinks-mcp/  a second, deliberately separate MCP server (below)
 ```
+
+### `vault-backlinks-mcp/` — a separate tool, not a duplicate
+
+A standalone MCP server exposing exactly one tool, also called
+`vault_backlinks`. It looks redundant with `evidence_evaluator.retrieval`'s
+tool of the same name and is not:
+
+| | `evidence_evaluator.retrieval` | `vault-backlinks-mcp` |
+|---|---|---|
+| answers | "what incoming edges can I safely retrieve?" | "what did Obsidian's graph index, right now?" |
+| backend | filesystem Markdown graph + optional Obsidian CLI | Obsidian CLI only |
+| CLI unavailable | degrades, `fallback_used="filesystem"` | says so; never silently substitutes |
+
+Measured on the real `Project_in_progress` vault (2026-08-15): the same
+query for `CLAUDE.md` returned **50** entries through the retrieval package
+and **5** through the live CLI. The retrieval package counts a filename
+mentioned inside a code span as an edge — correct for "find me related
+documents", wrong for "what is actually linked". Neither number is a bug;
+they answer different questions. See
+[`docs/SEMANTIC_BOUNDARY_VAULT_BACKLINKS.md`](docs/SEMANTIC_BOUNDARY_VAULT_BACKLINKS.md).
+
+It was developed as its own repository and brought in with `git subtree`
+rather than copied, so its history came along. That matters concretely:
+`vault-backlinks-mcp/experiments/2026-08-08_tool_only_context/_prompts.json`
+freezes a preregistered experiment against `design_commit 182570b`, and
+`test_protocol.py` treats that hash as provenance. A flat copy would have
+left it pointing at nothing.
+
+Its tests run from this repo's root along with everything else; it keeps its
+own `pyproject.toml` because it installs and runs independently.
 
 The modules support normal package imports. `evaluator.py` retains a direct
 script fallback because it re-executes **itself** as a subprocess
