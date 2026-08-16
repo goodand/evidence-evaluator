@@ -634,3 +634,95 @@ def test_backlinks_only_reports_unavailable_on_cli_failure(tmp_path):
     # The warning must carry the actual failure detail, not a generic string.
     assert "target.md" in result.warnings[0]
     assert "unable to find Obsidian" in result.warnings[0]
+
+
+# --- D1b/D3: ranking demotion (2026-08-16) -------------------------------
+# Measured on the real vault before this existed: a direct-keyword query
+# returned four superseded `archive/` copies in its top four while the current
+# document sat outside the output window, and a known-answer query returned
+# three generated MOC indexes ahead of the decision document they index.
+# Recall over the 5-question set went 3/5 -> 4/5 with demotion configured.
+
+def _tiered_vault(tmp_path):
+    """Two documents that both answer the query. The archived one is shorter,
+    so BM25 length normalization ranks it FIRST without demotion -- that is
+    the defect this reproduces, not a contrived tie."""
+    (tmp_path / "archive").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "archive" / "old.md").write_text(
+        "widget calibration procedure\n", encoding="utf-8")
+    (tmp_path / "docs" / "current.md").write_text(
+        "widget calibration procedure, with the additional detail that makes "
+        "this the longer and therefore BM25-disfavoured document\n",
+        encoding="utf-8")
+    return tmp_path
+
+
+def test_without_demotion_the_archived_copy_wins(tmp_path):
+    """The baseline the fix has to beat. If this ever stops holding, the
+    demotion test below stops proving anything and both need rewriting."""
+    out = _svc(_tiered_vault(tmp_path)).search(
+        "widget calibration procedure", output_k=2, candidate_pool_k=10, graph_seed_k=4)
+    assert out["retrieved_paths"][0] == "archive/old.md"
+
+
+def test_demoted_paths_rank_below_equally_relevant_current_ones(tmp_path):
+    out = _svc(_tiered_vault(tmp_path), demoted_prefixes=("archive/",)).search(
+        "widget calibration procedure", output_k=2, candidate_pool_k=10, graph_seed_k=4)
+    assert out["retrieved_paths"][0] == "docs/current.md"
+    # Demotion reorders; it must not drop the demoted document.
+    assert "archive/old.md" in out["retrieved_paths"], (
+        "demotion must change ORDER, not membership -- archived material is "
+        "still real evidence a caller may need"
+    )
+
+
+def test_demotion_does_not_reorder_within_a_tier(tmp_path):
+    """Two demoted documents keep their relative relevance order; demotion is
+    a tier boundary, not a re-scoring."""
+    vault = _tiered_vault(tmp_path)
+    (vault / "archive" / "older.md").write_text(
+        "widget calibration procedure detail detail detail detail\n",
+        encoding="utf-8")
+    plain = _svc(vault).search("widget calibration procedure",
+                               output_k=5, candidate_pool_k=10, graph_seed_k=4)["retrieved_paths"]
+    demoted = _svc(vault, demoted_prefixes=("archive/",)).search(
+        "widget calibration procedure", output_k=5,
+        candidate_pool_k=10, graph_seed_k=4)["retrieved_paths"]
+    within = lambda paths: [p for p in paths if p.startswith("archive/")]
+    assert within(plain) == within(demoted)
+
+
+def test_env_carries_ranking_policy_into_the_profile(tmp_path, monkeypatch):
+    """D1a's root cause: `from_env()` accepted only root/vault-name/CLI flags,
+    so an MCP server started with EVIDENCE_VAULT_ROOT -- the normal way it is
+    launched -- silently ran with NO authority order and NO demotion. The
+    policy existed and was unreachable."""
+    monkeypatch.setenv("EVIDENCE_VAULT_ROOT", str(tmp_path))
+    monkeypatch.setenv("EVIDENCE_VAULT_AUTHORITY_PREFIXES", "docs/, notes/audits/")
+    monkeypatch.setenv("EVIDENCE_VAULT_DEMOTED_PREFIXES", "archive/")
+    monkeypatch.setenv("EVIDENCE_VAULT_EXCLUDED_GLOBS", "*.tmp.md")
+    monkeypatch.delenv("EVIDENCE_VAULT_PROFILE", raising=False)
+
+    profile = VaultProfile.from_env()
+    assert profile.authority_prefixes == ("docs/", "notes/audits/")
+    assert profile.demoted_prefixes == ("archive/",)
+    assert profile.excluded_globs == ("*.tmp.md",)
+    assert profile.is_demoted("archive/anything.md") is True
+    assert profile.is_demoted("docs/anything.md") is False
+
+
+def test_a_coarse_authority_prefix_also_matches_nested_worktrees(tmp_path):
+    """Recorded because it cost a wrong conclusion once (2026-08-16): prefixes
+    match by string, so `concept-gate-taxonomy/` also matches
+    `concept-gate-taxonomy/.claude/worktrees/.../docs/`, and the nested copy
+    can win the canonical slot. Precision is the caller's job; this test
+    exists so the behavior is stated rather than discovered again."""
+    profile = VaultProfile(root=tmp_path, authority_prefixes=("proj/",))
+    coarse_tier, _ = profile.authority_rank("proj/.worktrees/x/docs/a.md")
+    true_tier, _ = profile.authority_rank("proj/docs/a.md")
+    assert coarse_tier == true_tier, "a coarse prefix cannot separate these"
+
+    precise = VaultProfile(root=tmp_path, authority_prefixes=("proj/docs/",))
+    assert precise.authority_rank("proj/docs/a.md")[0] < \
+        precise.authority_rank("proj/.worktrees/x/docs/a.md")[0]

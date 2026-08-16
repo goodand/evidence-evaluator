@@ -38,6 +38,14 @@ class VaultProfile:
     obsidian_enabled: bool = True
     aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     authority_prefixes: tuple[str, ...] = ()
+    # Paths under these are still searched, still returned, but rank BELOW
+    # any equally-relevant path that is not demoted. For material a vault
+    # keeps but does not treat as current authority -- superseded copies
+    # under `archive/`, generated navigation indexes -- where deleting or
+    # excluding them would lose real content but leaving them at equal
+    # footing lets them crowd out the canonical document. Empty by default:
+    # a vault that has not declared its authority order gets no reordering.
+    demoted_prefixes: tuple[str, ...] = ()
     excluded_globs: tuple[str, ...] = ()
     blocked_parts: frozenset[str] = DEFAULT_BLOCKED_PARTS
     max_markdown_bytes: int = 2_000_000
@@ -64,6 +72,11 @@ class VaultProfile:
             self,
             "authority_prefixes",
             tuple(_normalize_prefix(value) for value in self.authority_prefixes),
+        )
+        object.__setattr__(
+            self,
+            "demoted_prefixes",
+            tuple(_normalize_prefix(value) for value in self.demoted_prefixes),
         )
         object.__setattr__(
             self,
@@ -96,6 +109,25 @@ class VaultProfile:
             fnmatch.fnmatch(normalized, pattern)
             or candidate.match(pattern)
             for pattern in self.excluded_globs
+        )
+
+    def is_demoted(self, relative_path: str) -> bool:
+        """Should this path rank below equally-relevant non-demoted paths?
+
+        Separate from `authority_rank`, which only breaks ties between
+        BYTE-IDENTICAL replicas when choosing a canonical representative and
+        never affects search order. Measured 2026-08-16 on a real vault: the
+        top four results for a direct-keyword query were all superseded
+        `archive/` copies while the current document sat outside the output
+        window, and a known-answer query returned three generated MOC indexes
+        ahead of the decision document they index. Both are relevance-ranking
+        working as designed on a corpus that keeps its own history; the
+        missing input is which parts of the corpus are current.
+        """
+        normalized = PurePosixPath(relative_path).as_posix()
+        return any(
+            normalized == prefix.rstrip("/") or normalized.startswith(prefix)
+            for prefix in self.demoted_prefixes
         )
 
     def authority_rank(self, relative_path: str) -> tuple[int, str]:
@@ -142,6 +174,7 @@ class VaultProfile:
                 if isinstance(values, list)
             },
             authority_prefixes=tuple(payload.get("authority_prefixes") or ()),
+            demoted_prefixes=tuple(payload.get("demoted_prefixes") or ()),
             excluded_globs=tuple(payload.get("excluded_globs") or ()),
             blocked_parts=frozenset(
                 payload.get("blocked_parts") or DEFAULT_BLOCKED_PARTS
@@ -175,7 +208,23 @@ class VaultProfile:
             ),
             obsidian_enabled=os.environ.get("EVIDENCE_OBSIDIAN_ENABLED", "1")
             not in {"0", "false", "False"},
+            # Ranking policy was previously reachable ONLY through a profile
+            # JSON file, so every server started with EVIDENCE_VAULT_ROOT --
+            # which is how the MCP server is normally launched -- silently ran
+            # with no authority order and no demotion at all. Measured
+            # 2026-08-16: that is why superseded `archive/` copies and
+            # generated MOC indexes outranked current documents on the real
+            # vault. Same field names as the JSON profile, comma-separated.
+            authority_prefixes=_split_env("EVIDENCE_VAULT_AUTHORITY_PREFIXES"),
+            demoted_prefixes=_split_env("EVIDENCE_VAULT_DEMOTED_PREFIXES"),
+            excluded_globs=_split_env("EVIDENCE_VAULT_EXCLUDED_GLOBS"),
         )
+
+
+def _split_env(name: str) -> tuple[str, ...]:
+    """Comma-separated env list, empty tuple when unset or blank."""
+    raw = os.environ.get(name, "")
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
 def _normalize_prefix(value: str) -> str:

@@ -183,6 +183,15 @@ class RecallFirstRetriever:
         ranked, channel_ranks = reciprocal_rank_fusion(
             channels, weights={"graph": 3.0}
         )
+        # Demotion is applied to the ORDER, never to membership: a demoted
+        # path that earned its way into the pool stays in the pool, it just
+        # sorts after equally-relevant current material. Relevance order
+        # within each tier is untouched, so with no `demoted_prefixes`
+        # configured this is exactly the previous ranking.
+        ranked = sorted(
+            ranked,
+            key=lambda item: (self.corpus.profile.is_demoted(item[0]), -item[1], item[0]),
+        )
         pool_paths = [path for path, _ in ranked[: config.candidate_pool_k]]
         selected_paths = pool_paths[: config.output_k]
         score_by_path = dict(ranked)
