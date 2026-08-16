@@ -70,10 +70,12 @@ else:
 # whose whole point is opting out. Any value not explicitly recognized as
 # "off" here still means "on" (the default), but the false-spellings list is
 # now deliberately wide rather than three exact strings.
-_FALLBACK_OFF_VALUES = {"0", "false", "False", "no", "No", "off", "Off",
-                        "disabled", "Disabled"}
+# Compared case-insensitively: an earlier version listed exact spellings, so
+# "FALSE"/"OFF"/"NO" (uppercase) fell through and silently ENABLED the very
+# thing the operator was trying to turn off (adversarial review 2026-08-16).
+_FALLBACK_OFF_VALUES = {"0", "false", "no", "off", "disabled"}
 FILESYSTEM_FALLBACK_ENABLED = (
-    os.environ.get("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", "1").strip()
+    os.environ.get("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", "1").strip().casefold()
     not in _FALLBACK_OFF_VALUES
 )
 if FILESYSTEM_FALLBACK_ENABLED:

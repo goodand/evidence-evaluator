@@ -77,3 +77,32 @@ def test_confirm_active_vault_is_always_unknown():
     rule (obsidian_backend.py) never to assume active-vault status without a
     real check."""
     assert confirm_active_vault(Path("/vault")) == "unknown"
+
+
+class _BackendWithoutBacklinksOnly:
+    """An older evidence_evaluator: ObsidianCliBackend with `neighbors()` but
+    no `backlinks_only()`. Real, not hypothetical -- reproduced 2026-08-16
+    against the actual evidence-evaluator checkout, whose working tree
+    predated that method while its branch tip already had it."""
+
+    def neighbors(self, path):
+        raise AssertionError("should never be reached")
+
+
+def test_an_evidence_evaluator_without_backlinks_only_is_unavailable_not_a_crash():
+    """Adversarial review 2026-08-16 (blocker): this raised a bare
+    AttributeError, which contracts.py does not catch -- it handles only
+    ObsidianUnavailable -- so it escaped to the MCP boundary as an unhandled
+    exception. A version mismatch is an unavailable backend, not a crash."""
+    with pytest.raises(ObsidianUnavailable) as excinfo:
+        fetch_backlinks(Path("/vault"), "myvault", "target.md",
+                        backend=_BackendWithoutBacklinksOnly())
+    assert "backlinks_only" in str(excinfo.value)
+
+
+def test_evidence_evaluator_dir_expands_a_tilde():
+    """A `~`-relative EVIDENCE_EVALUATOR_DIR used to land on sys.path
+    literally, where no import can resolve it (adversarial review
+    2026-08-16)."""
+    import obsidian_backend_evidence as mod
+    assert "~" not in str(mod._EVIDENCE_DIR)

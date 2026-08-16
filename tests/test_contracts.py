@@ -150,11 +150,23 @@ def test_obsidian_unavailable_falls_back_but_is_clearly_labeled(vault, monkeypat
         return real_fallback(vault_root, path)
     monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", spy)
 
+    # Give the fixture a REAL incoming link. A second adversarial review
+    # (2026-08-16) showed the spy alone was still not enough: this vault has
+    # no wikilinks, so the genuine fallback returned [] -- indistinguishable
+    # from a mutation that returns a hardcoded [] without scanning anything,
+    # because `[] is not None` passes either way. Now the scan has something
+    # to find, and the assertion is on the found value.
+    (vault["t1"].root / "docs" / "source.md").write_text(
+        "see [[target]]", encoding="utf-8")
+
     result = contracts.query_backlinks("t1", "target.md", registry=vault)
     assert calls, "the filesystem fallback was never actually called"
     assert calls[0][1] == "target.md"
     assert result["backend_used"] == "filesystem_fallback"
-    assert result["backlinks"] is not None
+    assert result["backlinks"] == [{"source_path": "docs/source.md", "link_count": 1}], (
+        "the fallback must return the link it actually scanned, not an empty list"
+    )
+    assert result["total"] == 1
     assert result["error"] is None
     assert result["review_required"] is True
     codes = {c["code"] for c in result["review_checks"]}
@@ -194,8 +206,13 @@ def test_unrecognized_fallback_env_values_do_not_silently_disable_it(monkeypatch
     of what someone typing them intends. Recognized off-spellings must turn
     it off; anything unrecognized still defaults to on."""
     import importlib
+    # Uppercase spellings included deliberately: a follow-up review
+    # (2026-08-16) found the comparison was case-sensitive, so "FALSE"/"OFF"/
+    # "NO" fell through and ENABLED the fallback an operator was disabling.
     for value, expected in (("0", False), ("false", False), ("False", False),
-                            ("no", False), ("off", False), ("disabled", False),
+                            ("FALSE", False), ("no", False), ("NO", False),
+                            ("off", False), ("OFF", False),
+                            ("disabled", False), ("DISABLED", False),
                             (" 0 ", False), ("1", True), ("true", True),
                             ("", True)):
         monkeypatch.setenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", value)
@@ -219,7 +236,26 @@ def test_obsidian_unavailable_is_an_honest_failure_when_fallback_is_off(
         raise ObsidianUnavailable("obsidian CLI is not on PATH")
     monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
     monkeypatch.setattr(contracts, "FILESYSTEM_FALLBACK_ENABLED", False)
+
+    # Assert the fallback was not merely ineffective but never REACHED.
+    # Adversarial review 2026-08-16: inferring "it didn't run" from
+    # backend_used/error alone cannot tell "the switch stopped it" from "it
+    # ran and happened to produce nothing usable" -- and only the first is
+    # the contract being tested here.
+    calls = []
+
+    def must_not_run(vault_root, path):
+        calls.append((vault_root, path))
+        return ["docs/source.md"]
+    monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", must_not_run)
+
+    # Give the vault a real link, so a fallback that DID run would visibly
+    # change the result rather than coincidentally matching the failure shape.
+    (vault["t1"].root / "docs" / "source.md").write_text(
+        "see [[target]]", encoding="utf-8")
+
     result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert calls == [], "the fallback ran even though it was switched off"
     assert result["backend_used"] == "none"
     assert result["backlinks"] is None
     assert "obsidian CLI is not on PATH" in result["error"]

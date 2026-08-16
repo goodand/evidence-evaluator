@@ -42,8 +42,12 @@ from pathlib import Path
 
 _DEFAULT_EVIDENCE_EVALUATOR_DIR = (Path.home() / "Desktop" / "Project_in_progress" /
                                    "evidence-evaluator")
-_EVIDENCE_DIR = Path(os.environ.get("EVIDENCE_EVALUATOR_DIR",
-                                    str(_DEFAULT_EVIDENCE_EVALUATOR_DIR)))
+# `.expanduser()` so `EVIDENCE_EVALUATOR_DIR=~/src/evidence-evaluator` works
+# rather than putting a literal "~" on sys.path, where no import can resolve
+# it and the failure surfaces later as a confusing ImportError (adversarial
+# review 2026-08-16).
+_EVIDENCE_DIR = Path(os.environ.get(
+    "EVIDENCE_EVALUATOR_DIR", str(_DEFAULT_EVIDENCE_EVALUATOR_DIR))).expanduser()
 if str(_EVIDENCE_DIR) not in sys.path:
     sys.path.insert(0, str(_EVIDENCE_DIR))
 
@@ -85,6 +89,19 @@ def fetch_backlinks(vault_root: Path, obsidian_vault_name: str, path: str, *,
                 f"{_EVIDENCE_DIR}: {_IMPORT_ERROR}")
         profile = VaultProfile(root=vault_root, vault_name=obsidian_vault_name)
         backend = ObsidianCliBackend(profile)
+    # `backlinks_only()` is a recent addition to evidence_evaluator; an older
+    # checkout on EVIDENCE_EVALUATOR_DIR has ObsidianCliBackend WITHOUT it.
+    # Reproduced 2026-08-16 (adversarial review, blocker): that raised a bare
+    # AttributeError, which `contracts.py` does not catch -- it only handles
+    # ObsidianUnavailable -- so it escaped to the MCP boundary as an unhandled
+    # exception, exactly the failure mode this package promises never to
+    # produce. A version mismatch is an unavailable backend, not a crash.
+    if not hasattr(backend, "backlinks_only"):
+        raise ObsidianUnavailable(
+            f"evidence_evaluator at {_EVIDENCE_DIR} has an ObsidianCliBackend "
+            f"without `backlinks_only()` -- it predates that method. Point "
+            f"EVIDENCE_EVALUATOR_DIR at a checkout that has it, or use "
+            f"VAULT_BACKLINKS_BACKEND=harness.")
     result = backend.backlinks_only(CanonicalPath(path))
     if not result.available:
         raise ObsidianUnavailable(
