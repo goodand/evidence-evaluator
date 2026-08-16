@@ -62,8 +62,20 @@ else:
 # broader answer over an outright failure. Set
 # VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0 to go back to pure live-only,
 # no-fallback behavior (the original DO-NOT-BUILD-derived contract).
-FILESYSTEM_FALLBACK_ENABLED = os.environ.get(
-    "VAULT_BACKLINKS_FILESYSTEM_FALLBACK", "1") not in {"0", "false", "False"}
+#
+# An allowlist of "off" spellings, not a blocklist of "on" ones: an
+# adversarial review (2026-08-15) found the earlier `not in {"0", "false",
+# "False"}` form would silently treat a typo'd or unexpected value (e.g.
+# "disabled", "No", a stray "TRUE\n") as enabled -- surprising for a switch
+# whose whole point is opting out. Any value not explicitly recognized as
+# "off" here still means "on" (the default), but the false-spellings list is
+# now deliberately wide rather than three exact strings.
+_FALLBACK_OFF_VALUES = {"0", "false", "False", "no", "No", "off", "Off",
+                        "disabled", "Disabled"}
+FILESYSTEM_FALLBACK_ENABLED = (
+    os.environ.get("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", "1").strip()
+    not in _FALLBACK_OFF_VALUES
+)
 if FILESYSTEM_FALLBACK_ENABLED:
     from obsidian_backend_evidence import filesystem_fallback_backlinks
 else:
@@ -233,12 +245,29 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
     try:
         raw = fetch_backlinks(vault.root, vault.obsidian_vault_name, clean_path)
     except ObsidianUnavailable as exc:
-        fallback_paths = (
-            filesystem_fallback_backlinks(vault.root, clean_path)
-            if FILESYSTEM_FALLBACK_ENABLED and filesystem_fallback_backlinks is not None
-            else None
-        )
+        # The fallback gets its OWN guard, not the live call's. Reproduced
+        # 2026-08-15 (adversarial review, blocker): this call was unguarded,
+        # so a vault root deleted or made unreadable between `load_registry()`
+        # and here raised OSError/ProfileError straight out of
+        # `query_backlinks()` -- breaking this module's whole promise that
+        # every caller-facing problem becomes a structured result with
+        # `backend_used: "none"` and an `error` string, never a raw exception
+        # at the MCP boundary. A fallback that crashes is strictly worse than
+        # the honest failure it was added to avoid.
+        fallback_paths = None
+        fallback_error = None
+        if FILESYSTEM_FALLBACK_ENABLED and filesystem_fallback_backlinks is not None:
+            try:
+                fallback_paths = filesystem_fallback_backlinks(vault.root, clean_path)
+            except Exception as fallback_exc:  # noqa: BLE001 -- see above
+                fallback_error = fallback_exc
         if fallback_paths is None:
+            if fallback_error is not None:
+                return _error_result(
+                    vault_id, clean_path,
+                    f"live backend unavailable: {exc}; filesystem fallback also "
+                    f"failed: {fallback_error!r}",
+                    review_checks=review_checks or None)
             return _error_result(vault_id, clean_path, f"live backend unavailable: {exc}",
                                  review_checks=review_checks or None)
         raw = [{"file": item} for item in fallback_paths]

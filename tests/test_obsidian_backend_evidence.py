@@ -59,6 +59,11 @@ def test_fetch_backlinks_link_count_is_always_the_fallback_default():
     backend = _FakeBackend(_FakeBacklinksResult(
         backlinks=("a.md",), warnings=(), available=True))
     result = fetch_backlinks(Path("/vault"), "myvault", "target.md", backend=backend)
+    # Assert the call happened too, not just the shape of what came back.
+    # Adversarial review 2026-08-15: asserting only on the returned shape let
+    # an implementation that never touched the backend and returned a
+    # hardcoded list pass this test unchanged.
+    assert backend.calls == ["target.md"], "backlinks_only() was never called"
     assert "count" not in result[0], (
         "evidence_evaluator now preserves counts -- update this module's "
         "docstring, this test, and reconsider whether the measured gap "

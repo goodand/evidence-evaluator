@@ -136,13 +136,75 @@ def test_obsidian_unavailable_falls_back_but_is_clearly_labeled(vault, monkeypat
     def raise_unavailable(root, name, path):
         raise ObsidianUnavailable("obsidian CLI is not on PATH")
     monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+
+    # Spy on the fallback itself, not just its side effects. An adversarial
+    # review (2026-08-15) showed the earlier version of this test passed even
+    # when the fallback call was replaced by a hardcoded empty list -- it
+    # asserted only on the shape of the result, so "the fallback ran" and
+    # "something produced a fallback-shaped result" were indistinguishable.
+    calls = []
+    real_fallback = contracts.filesystem_fallback_backlinks
+
+    def spy(vault_root, path):
+        calls.append((vault_root, path))
+        return real_fallback(vault_root, path)
+    monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", spy)
+
     result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert calls, "the filesystem fallback was never actually called"
+    assert calls[0][1] == "target.md"
     assert result["backend_used"] == "filesystem_fallback"
     assert result["backlinks"] is not None
     assert result["error"] is None
     assert result["review_required"] is True
     codes = {c["code"] for c in result["review_checks"]}
     assert "FILESYSTEM_FALLBACK_USED" in codes
+
+
+def test_a_crashing_filesystem_fallback_still_returns_a_structured_error(
+    vault, monkeypatch
+):
+    """Adversarial review 2026-08-15 (blocker): the fallback call was not
+    guarded by its own try/except, so an OSError/ProfileError from it (vault
+    root deleted or unreadable between registry load and this call) escaped
+    `query_backlinks()` as a raw exception -- violating this module's
+    contract that every caller-facing failure becomes a structured result.
+    A fallback that crashes is worse than the honest failure it replaced."""
+    from obsidian_backend import ObsidianUnavailable
+
+    def raise_unavailable(root, name, path):
+        raise ObsidianUnavailable("obsidian CLI is not on PATH")
+
+    def exploding_fallback(vault_root, path):
+        raise OSError("vault root vanished")
+
+    monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+    monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", exploding_fallback)
+
+    result = contracts.query_backlinks("t1", "target.md", registry=vault)
+    assert result["backend_used"] == "none"
+    assert result["backlinks"] is None
+    assert "obsidian CLI is not on PATH" in result["error"]
+    assert "vault root vanished" in result["error"]
+
+
+def test_unrecognized_fallback_env_values_do_not_silently_disable_it(monkeypatch):
+    """Adversarial review 2026-08-15: the switch used a blocklist of three
+    exact strings, so "disabled"/"No"/"off" read as ENABLED -- the opposite
+    of what someone typing them intends. Recognized off-spellings must turn
+    it off; anything unrecognized still defaults to on."""
+    import importlib
+    for value, expected in (("0", False), ("false", False), ("False", False),
+                            ("no", False), ("off", False), ("disabled", False),
+                            (" 0 ", False), ("1", True), ("true", True),
+                            ("", True)):
+        monkeypatch.setenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", value)
+        reloaded = importlib.reload(contracts)
+        assert reloaded.FILESYSTEM_FALLBACK_ENABLED is expected, (
+            f"{value!r} should map to enabled={expected}"
+        )
+    monkeypatch.delenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", raising=False)
+    importlib.reload(contracts)
 
 
 def test_obsidian_unavailable_is_an_honest_failure_when_fallback_is_off(
