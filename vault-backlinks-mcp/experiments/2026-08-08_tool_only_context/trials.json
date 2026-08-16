@@ -1,0 +1,1248 @@
+{
+  "protocol": {
+    "design_commit": "182570b5e0c6e05b5bc5ac66762df4adb94d63f3",
+    "subject_model": "haiku",
+    "replicates_per_cell": 5,
+    "context_isolation": "workflow_cold_subagent",
+    "tool_access": "description_only"
+  },
+  "trials": [
+    {
+      "trial_id": "T0__A_backend_failure",
+      "arm": "T0",
+      "case": "A_backend_failure",
+      "replicate": 0,
+      "prompt_sha256": "f6f0cdb0d0ccde19d409fd71190ff6de6bbb97f80b1b04b5d713fc825a17d72e",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "obsidian CLI not on PATH — backend unavailable",
+          "BASENAME_COLLISION: 11 other CLAUDE.md files exist; exact-path resolution required",
+          "Result is BLOCKED, not PASS — backlink count cannot be established"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__A_backend_failure",
+      "arm": "T0",
+      "case": "A_backend_failure",
+      "replicate": 1,
+      "prompt_sha256": "f6f0cdb0d0ccde19d409fd71190ff6de6bbb97f80b1b04b5d713fc825a17d72e",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "obsidian CLI not available on PATH—backend search did not run",
+          "11 other CLAUDE.md files exist in vault (basename collision); exact path resolution required",
+          "response flagged review_required=true",
+          "without CLI, backlink graph traversal cannot occur"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__A_backend_failure",
+      "arm": "T0",
+      "case": "A_backend_failure",
+      "replicate": 2,
+      "prompt_sha256": "f6f0cdb0d0ccde19d409fd71190ff6de6bbb97f80b1b04b5d713fc825a17d72e",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI is not on PATH — live backend unavailable, result unverified",
+          "Basename collision with 11 other CLAUDE.md files in the vault; backlinks to the specific queried file cannot be reliably distinguished",
+          "Result reflects only what the fallback method could determine; graph traversal and manual backlink confirmation were not performed"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__A_backend_failure",
+      "arm": "T0",
+      "case": "A_backend_failure",
+      "replicate": 3,
+      "prompt_sha256": "f6f0cdb0d0ccde19d409fd71190ff6de6bbb97f80b1b04b5d713fc825a17d72e",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI unavailable — retrieval backend could not execute",
+          "11 other CLAUDE.md files exist in vault; basename collision requires exact-path resolution by consumers",
+          "Result state: BLOCKED (unverified, not a confirmed zero)"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__A_backend_failure",
+      "arm": "T0",
+      "case": "A_backend_failure",
+      "replicate": 4,
+      "prompt_sha256": "f6f0cdb0d0ccde19d409fd71190ff6de6bbb97f80b1b04b5d713fc825a17d72e",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Live backend unavailable: Obsidian CLI is not on PATH",
+          "Backlinks result is null (not empty list), indicating query did not complete successfully",
+          "Basename collision: 11 other CLAUDE.md files exist in different worktrees; full path resolution may have been ambiguous",
+          "Review required flag is set in response"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__B_genuine_zero",
+      "arm": "T0",
+      "case": "B_genuine_zero",
+      "replicate": 0,
+      "prompt_sha256": "884ff25fae806914742160b8bbc136ec6a3a24119f3fdccc647aad6102b42de9",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files named 'CLAUDE.md' exist across the vault in different directories and worktrees. References must use exact path, not basename, to avoid resolving to the wrong file."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__B_genuine_zero",
+      "arm": "T0",
+      "case": "B_genuine_zero",
+      "replicate": 1,
+      "prompt_sha256": "884ff25fae806914742160b8bbc136ec6a3a24119f3fdccc647aad6102b42de9",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "This file shares the basename 'CLAUDE.md' with 11 other files in the vault across different worktrees and archive directories. The response confirms backlinks should be resolved by exact path, not basename. The count of 0 is definitive for this specific path, but the basename collision is noted as a potential source of confusion for consumers."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__B_genuine_zero",
+      "arm": "T0",
+      "case": "B_genuine_zero",
+      "replicate": 2,
+      "prompt_sha256": "884ff25fae806914742160b8bbc136ec6a3a24119f3fdccc647aad6102b42de9",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files share the name 'CLAUDE.md' across the vault",
+          "Search returned review_required=true; results may be unreliable",
+          "Backlinks using basename-only references would not be detected",
+          "Result may be false negative rather than confirmed zero backlinks"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__B_genuine_zero",
+      "arm": "T0",
+      "case": "B_genuine_zero",
+      "replicate": 3,
+      "prompt_sha256": "884ff25fae806914742160b8bbc136ec6a3a24119f3fdccc647aad6102b42de9",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist in this vault across worktrees and archive directories. Backlinks must be resolved by exact path to avoid false negatives. The queried file is /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__B_genuine_zero",
+      "arm": "T0",
+      "case": "B_genuine_zero",
+      "replicate": 4,
+      "prompt_sha256": "884ff25fae806914742160b8bbc136ec6a3a24119f3fdccc647aad6102b42de9",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision detected: 11 other files named CLAUDE.md exist across this vault in different directories (active worktrees, archived worktrees, and nested worktrees). The zero-backlink result may be unreliable due to disambiguation issues. Backlinks search requires exact path resolution to be trustworthy in this case."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__C_all_out_of_scope",
+      "arm": "T0",
+      "case": "C_all_out_of_scope",
+      "replicate": 0,
+      "prompt_sha256": "f75ee2e152002890abf0b7539c41b62cc54062a7cf1cbbc2da3aa9c09ae7bfe8",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist across worktrees and archives; backlink tool may resolve to wrong file",
+          "Obsidian CLI vault argument not reliably honored (measured issue); active vault in Obsidian app may not match vault_id",
+          "1 result was dropped as out-of-scope; cannot confirm this as truly zero backlinks without re-checking which vault is open in the Obsidian app",
+          "Tool returned 0 results but marked all as out-of-scope, making the count unreliable"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__C_all_out_of_scope",
+      "arm": "T0",
+      "case": "C_all_out_of_scope",
+      "replicate": 1,
+      "prompt_sha256": "f75ee2e152002890abf0b7539c41b62cc54062a7cf1cbbc2da3aa9c09ae7bfe8",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian app's active vault does not match the queried vault_id (project-in-progress), making the zero-count unreliable",
+          "Basename collision: 11 other files named CLAUDE.md exist in this vault; consumers must resolve by exact path",
+          "One result was dropped because it fell out of scope for the queried vault"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__C_all_out_of_scope",
+      "arm": "T0",
+      "case": "C_all_out_of_scope",
+      "replicate": 2,
+      "prompt_sha256": "f75ee2e152002890abf0b7539c41b62cc54062a7cf1cbbc2da3aa9c09ae7bfe8",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian app's active vault may not match the queried vault_id, making the result unreliable",
+          "11 other files share the basename 'CLAUDE.md' (basename collision)",
+          "CLI returned 1 result but it was dropped as out-of-scope, suggesting actual backlink count may not be zero",
+          "Measured issue: CLI's vault argument not reliably honored as of 2026-08-08"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__C_all_out_of_scope",
+      "arm": "T0",
+      "case": "C_all_out_of_scope",
+      "replicate": 3,
+      "prompt_sha256": "f75ee2e152002890abf0b7539c41b62cc54062a7cf1cbbc2da3aa9c09ae7bfe8",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian app's active vault may not match the queried vault_id (project-in-progress), making results unreliable",
+          "One backlink result was dropped out of scope",
+          "11 other files share the basename 'CLAUDE.md' across worktrees — results must be verified by exact path, not basename",
+          "Obsidian CLI vault argument not reliably honored per measured issue 2026-08-08"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__C_all_out_of_scope",
+      "arm": "T0",
+      "case": "C_all_out_of_scope",
+      "replicate": 4,
+      "prompt_sha256": "f75ee2e152002890abf0b7539c41b62cc54062a7cf1cbbc2da3aa9c09ae7bfe8",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other CLAUDE.md files exist across worktrees; queried file is ambiguous",
+          "ALL_RESULTS_OUT_OF_SCOPE: CLI vault matching may be unreliable; Obsidian app's active vault may not match vault_id",
+          "One result was dropped as out of scope",
+          "Result should not be treated as definitive; CLI recommends rechecking Obsidian app's active vault"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__D_real_hits_with_review",
+      "arm": "T0",
+      "case": "D_real_hits_with_review",
+      "replicate": 0,
+      "prompt_sha256": "66b0512e904581a0350463d4dddc55c2dd5a124139a3de3e11cda53e170f2af8",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files share the basename 'CLAUDE.md' (in archive/worktrees and active worktrees), making backlink resolution ambiguous",
+          "Reported backlinks may refer to different CLAUDE.md instances rather than this specific path",
+          "The count of 4 requires human verification due to path ambiguity"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__D_real_hits_with_review",
+      "arm": "T0",
+      "case": "D_real_hits_with_review",
+      "replicate": 1,
+      "prompt_sha256": "66b0512e904581a0350463d4dddc55c2dd5a124139a3de3e11cda53e170f2af8",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "The queried file (/Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md) shares its basename 'CLAUDE.md' with 11 other files in the vault. The 4 backlinks reported are specific to the root CLAUDE.md queried by path. Consumers must resolve references by exact path, not basename, to avoid linking to the wrong CLAUDE.md file in a different worktree or directory."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__D_real_hits_with_review",
+      "arm": "T0",
+      "case": "D_real_hits_with_review",
+      "replicate": 2,
+      "prompt_sha256": "66b0512e904581a0350463d4dddc55c2dd5a124139a3de3e11cda53e170f2af8",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: This file shares the basename 'CLAUDE.md' with 11 other files across the vault (in different worktrees and archives). The backlink result requires review (review_required: true). Consumers must resolve results by full path, not basename, to avoid disambiguation errors.",
+          "The response backend is 'live', but the collision warning means the count of 4 should be treated as provisional pending path-level verification."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__D_real_hits_with_review",
+      "arm": "T0",
+      "case": "D_real_hits_with_review",
+      "replicate": 3,
+      "prompt_sha256": "66b0512e904581a0350463d4dddc55c2dd5a124139a3de3e11cda53e170f2af8",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files in the vault share the basename 'CLAUDE.md' across different worktrees and directories. Any file-resolution logic must use exact paths (not basename matching) to avoid silently resolving to the wrong CLAUDE.md instance."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T0__D_real_hits_with_review",
+      "arm": "T0",
+      "case": "D_real_hits_with_review",
+      "replicate": 4,
+      "prompt_sha256": "66b0512e904581a0350463d4dddc55c2dd5a124139a3de3e11cda53e170f2af8",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "File shares basename 'CLAUDE.md' with 11 other files in vault across multiple worktrees; exact paths must be used for disambiguation, never basenames",
+          "Backlink count applies to the root workspace copy at /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md, not same-named files in other directories"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__A_backend_failure",
+      "arm": "T1",
+      "case": "A_backend_failure",
+      "replicate": 0,
+      "prompt_sha256": "b1bb87c8066d3fd21f3b4587b2848d15ded5772c3cbab4df13baa164cd251e63",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI backend unavailable at query time — live backlink lookup could not complete",
+          "11 other files in the vault share the basename 'CLAUDE.md' across different worktrees and archives; path-based resolution required to avoid collision",
+          "review_required flag indicates manual verification needed before treating result as definitive"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__A_backend_failure",
+      "arm": "T1",
+      "case": "A_backend_failure",
+      "replicate": 1,
+      "prompt_sha256": "b1bb87c8066d3fd21f3b4587b2848d15ded5772c3cbab4df13baa164cd251e63",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI unavailable (not on PATH) — backend could not retrieve backlinks",
+          "Basename collision: 11 other files named CLAUDE.md exist in the vault",
+          "Query was ambiguous (basename-only, not full path)",
+          "review_required: true indicates this result requires human verification before use"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__A_backend_failure",
+      "arm": "T1",
+      "case": "A_backend_failure",
+      "replicate": 2,
+      "prompt_sha256": "b1bb87c8066d3fd21f3b4587b2848d15ded5772c3cbab4df13baa164cd251e63",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI is not available; live backend unavailable to retrieve backlinks",
+          "11 other files in the vault share the basename 'CLAUDE.md' across different directories and worktrees, creating ambiguity if resolved by basename",
+          "The reported total of 0 is unverified and should not be relied upon",
+          "Any consumer of backlink data for this file must resolve by exact path, not basename"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__A_backend_failure",
+      "arm": "T1",
+      "case": "A_backend_failure",
+      "replicate": 3,
+      "prompt_sha256": "b1bb87c8066d3fd21f3b4587b2848d15ded5772c3cbab4df13baa164cd251e63",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI is not available on PATH—the backend could not execute the query (BLOCKED state, not zero results)",
+          "11 other files in this vault share the basename 'CLAUDE.md' (archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md, archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md, concept-gate-codex-mcp-wt/CLAUDE.md, concept-gate-e2.2-wt/CLAUDE.md, concept-gate-h1-wt/CLAUDE.md, concept-gate-h1a-scope-wt/CLAUDE.md, concept-gate-owl-wt/CLAUDE.md, concept-gate-redteam-wt/CLAUDE.md, concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md, concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md, concept-gate-taxonomy/CLAUDE.md); consumers must resolve by exact path, never basename alone"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__A_backend_failure",
+      "arm": "T1",
+      "case": "A_backend_failure",
+      "replicate": 4,
+      "prompt_sha256": "b1bb87c8066d3fd21f3b4587b2848d15ded5772c3cbab4df13baa164cd251e63",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI unavailable—backend returned 'none' status",
+          "11 other CLAUDE.md files exist across worktrees with basename collision; path-based resolution required",
+          "review_required flag set due to BASENAME_COLLISION code",
+          "Per project instructions, unavailable CLI backend creates BLOCKED verification status, not a reliable zero-backlink result"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__B_genuine_zero",
+      "arm": "T1",
+      "case": "B_genuine_zero",
+      "replicate": 0,
+      "prompt_sha256": "1f5a2a88e4c9184845dec8c0ed9cfb20771d0e28138f969e807e318c20cc2d7a",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "This file shares the basename 'CLAUDE.md' with 11 other files in the vault. Backlink consumers must use exact path resolution, not basename resolution, to reach this specific file. The count of 0 applies only to the exact-path file at /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md, not to same-named files in other directories."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__B_genuine_zero",
+      "arm": "T1",
+      "case": "B_genuine_zero",
+      "replicate": 1,
+      "prompt_sha256": "1f5a2a88e4c9184845dec8c0ed9cfb20771d0e28138f969e807e318c20cc2d7a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist in the vault across different worktrees and archives. Result is uncertain without confirming all consumers use exact-path resolution, not basename matching.",
+          "Review required flag is set due to BASENAME_COLLISION check in the response."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__B_genuine_zero",
+      "arm": "T1",
+      "case": "B_genuine_zero",
+      "replicate": 2,
+      "prompt_sha256": "1f5a2a88e4c9184845dec8c0ed9cfb20771d0e28138f969e807e318c20cc2d7a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "11 other files in this vault share the basename 'CLAUDE.md' across different worktrees and archive locations, creating basename collision ambiguity",
+          "The backlinks query resolved to a specific path but may not capture all incoming links due to the collision",
+          "Consumers of this result must resolve by exact path, not basename alone"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__B_genuine_zero",
+      "arm": "T1",
+      "case": "B_genuine_zero",
+      "replicate": 3,
+      "prompt_sha256": "1f5a2a88e4c9184845dec8c0ed9cfb20771d0e28138f969e807e318c20cc2d7a",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "11 other files in this vault share the basename 'CLAUDE.md' across archived and active worktrees; any reference must use exact path, not basename, to avoid silent resolution to the wrong file",
+          "This multi-worktree environment makes basename-based lookups inherently ambiguous"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__B_genuine_zero",
+      "arm": "T1",
+      "case": "B_genuine_zero",
+      "replicate": 4,
+      "prompt_sha256": "1f5a2a88e4c9184845dec8c0ed9cfb20771d0e28138f969e807e318c20cc2d7a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other files named 'CLAUDE.md' exist in the vault across multiple directories and worktrees. The queried path lacks full directory qualification, so the system cannot guarantee which CLAUDE.md file was actually queried.",
+          "Result depends on Obsidian CLI's path resolution; consumers must use exact paths to avoid ambiguity.",
+          "The backlink count of 0 is only valid if the correct CLAUDE.md file was queried. The BASENAME_COLLISION review check requires confirmation that path resolution was by exact path, not basename."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__C_all_out_of_scope",
+      "arm": "T1",
+      "case": "C_all_out_of_scope",
+      "replicate": 0,
+      "prompt_sha256": "b660a7879f2eb1159ab9cec4be61ef01a221702976a30f5238f5869c60c664af",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI vault mismatch: The app's active vault does not match the requested vault_id 'project-in-progress', compromising result reliability",
+          "One result was returned by Obsidian CLI but dropped as out-of-scope — the actual count may be 1, not 0",
+          "Basename collision: 11 other CLAUDE.md files exist in the repository across worktrees (archived and active) — confirm queries use exact path, not basename",
+          "The queried path /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md may not be the file whose backlinks were actually checked due to vault mismatch"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__C_all_out_of_scope",
+      "arm": "T1",
+      "case": "C_all_out_of_scope",
+      "replicate": 1,
+      "prompt_sha256": "b660a7879f2eb1159ab9cec4be61ef01a221702976a30f5238f5869c60c664af",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 12 CLAUDE.md files exist in vault (query was ambiguous)",
+          "Obsidian CLI vault= parameter not reliably honored; active vault may not match vault_id",
+          "1 result was returned but dropped as out-of-scope",
+          "Query must be retried with exact full path to establish reliable count"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__C_all_out_of_scope",
+      "arm": "T1",
+      "case": "C_all_out_of_scope",
+      "replicate": 2,
+      "prompt_sha256": "b660a7879f2eb1159ab9cec4be61ef01a221702976a30f5238f5869c60c664af",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist in other worktrees and archives",
+          "Critical reliability issue: Obsidian CLI vault argument not reliably honored; active vault in Obsidian app may not match queried vault_id, making zero-backlinks finding potentially unreliable",
+          "One backlink result was dropped out of scope",
+          "Any consumer must resolve by exact path, not basename"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__C_all_out_of_scope",
+      "arm": "T1",
+      "case": "C_all_out_of_scope",
+      "replicate": 3,
+      "prompt_sha256": "b660a7879f2eb1159ab9cec4be61ef01a221702976a30f5238f5869c60c664af",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist across worktrees and archives, making the queried path ambiguous",
+          "Obsidian vault mismatch: The app's active vault may not match the requested vault_id (measured as unreliable 2026-08-08)",
+          "One backlink result was returned by the CLI but dropped as out-of-scope; true count is unknown",
+          "The zero-backlink result cannot be trusted given these scope and collision issues"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__C_all_out_of_scope",
+      "arm": "T1",
+      "case": "C_all_out_of_scope",
+      "replicate": 4,
+      "prompt_sha256": "b660a7879f2eb1159ab9cec4be61ef01a221702976a30f5238f5869c60c664af",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI vault mapping unreliable: the active vault in the app does not reliably match the queried vault_id (known issue, measured 2026-08-08)",
+          "1 result was returned by the CLI but dropped as out-of-scope, indicating potential vault mismatch",
+          "11 other files share the basename 'CLAUDE.md' across different worktrees and locations; any consumer must resolve by exact path, not basename",
+          "To trust a definitive backlink count, confirm which vault is open in the Obsidian app and re-run the query with the correct vault_id"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__D_real_hits_with_review",
+      "arm": "T1",
+      "case": "D_real_hits_with_review",
+      "replicate": 0,
+      "prompt_sha256": "13d8edfe51d996fa985f829b8fc163828dda00e55258907f5cde459db10d74c2",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "11 other files with the same basename 'CLAUDE.md' exist in different worktrees within this vault. The backlink count is specific to the queried file's exact path; consumers must resolve by exact path to avoid ambiguity.",
+          "This result reflects backlinks found by the live Obsidian CLI backend at query time."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__D_real_hits_with_review",
+      "arm": "T1",
+      "case": "D_real_hits_with_review",
+      "replicate": 1,
+      "prompt_sha256": "13d8edfe51d996fa985f829b8fc163828dda00e55258907f5cde459db10d74c2",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files share the basename CLAUDE.md. Query used basename-only path, not exact path. Result is potentially unreliable — may reference wrong file. Per project instructions, exact paths (e.g. 'Project_in_progress/CLAUDE.md') are required to disambiguate."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__D_real_hits_with_review",
+      "arm": "T1",
+      "case": "D_real_hits_with_review",
+      "replicate": 2,
+      "prompt_sha256": "13d8edfe51d996fa985f829b8fc163828dda00e55258907f5cde459db10d74c2",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "Result obtained via live Obsidian CLI query (not cached index)",
+          "CRITICAL: 11 other files share the basename 'CLAUDE.md' elsewhere in the vault (in worktrees and archive). Use exact path, never basename alone, to avoid silent wrong-path resolution",
+          "All 4 backlinks come from MOC (Map of Contents) navigation files, suggesting CLAUDE.md is catalogued but not directly referenced in substantive documents"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__D_real_hits_with_review",
+      "arm": "T1",
+      "case": "D_real_hits_with_review",
+      "replicate": 3,
+      "prompt_sha256": "13d8edfe51d996fa985f829b8fc163828dda00e55258907f5cde459db10d74c2",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "This count is for the root CLAUDE.md only. 11 other same-named files exist in worktrees and archived directories. The backlinks are reliable because exact-path resolution was used, but consumers of backlink data should verify that all linking files resolve by exact path, not basename (per BASENAME_COLLISION review check)."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T1__D_real_hits_with_review",
+      "arm": "T1",
+      "case": "D_real_hits_with_review",
+      "replicate": 4,
+      "prompt_sha256": "13d8edfe51d996fa985f829b8fc163828dda00e55258907f5cde459db10d74c2",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "There are 11 other files named 'CLAUDE.md' in this vault (across worktrees and archive). Consumers must resolve by exact path, not basename, to avoid resolving to the wrong file.",
+          "The queried path is /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md (root workspace CLAUDE.md); backlinks are accurate for this specific path only."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__A_backend_failure",
+      "arm": "T2",
+      "case": "A_backend_failure",
+      "replicate": 0,
+      "prompt_sha256": "de5b6fde51dabbac9d2a853f8220b2287dbfd60b6dc5d12ca444ca2a5fb30627",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI not on PATH — live backend unavailable",
+          "Basename collision: 11 other CLAUDE.md files in vault; exact path required",
+          "Cannot establish definitive backlink count without working CLI"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__A_backend_failure",
+      "arm": "T2",
+      "case": "A_backend_failure",
+      "replicate": 1,
+      "prompt_sha256": "de5b6fde51dabbac9d2a853f8220b2287dbfd60b6dc5d12ca444ca2a5fb30627",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI is not available on PATH; live backlinks lookup could not execute",
+          "11 other files share the basename 'CLAUDE.md' across the vault; any resolution must use exact paths to avoid collisions"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__A_backend_failure",
+      "arm": "T2",
+      "case": "A_backend_failure",
+      "replicate": 2,
+      "prompt_sha256": "de5b6fde51dabbac9d2a853f8220b2287dbfd60b6dc5d12ca444ca2a5fb30627",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI is not available on PATH — the lookup did not run",
+          "12 files share the basename 'CLAUDE.md' across the vault (including archive and worktree copies), requiring exact-path resolution"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__A_backend_failure",
+      "arm": "T2",
+      "case": "A_backend_failure",
+      "replicate": 3,
+      "prompt_sha256": "de5b6fde51dabbac9d2a853f8220b2287dbfd60b6dc5d12ca444ca2a5fb30627",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI unavailable (backend_used: 'none') — lookup did not run",
+          "11 other files share the basename CLAUDE.md across worktrees and archives; exact-path resolution required to disambiguate"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__A_backend_failure",
+      "arm": "T2",
+      "case": "A_backend_failure",
+      "replicate": 4,
+      "prompt_sha256": "de5b6fde51dabbac9d2a853f8220b2287dbfd60b6dc5d12ca444ca2a5fb30627",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "The Obsidian CLI is not on PATH — the lookup could not execute",
+          "The file has the same basename as 11 other files in the vault, creating ambiguity in path resolution",
+          "The null result represents a failed lookup, not zero incoming links"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__B_genuine_zero",
+      "arm": "T2",
+      "case": "B_genuine_zero",
+      "replicate": 0,
+      "prompt_sha256": "415b144b332abc4908001004553b6754a67f059117fe1a7470c293d9570bf193",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other files named CLAUDE.md exist in the vault across different worktrees",
+          "Query used basename only ('CLAUDE.md'), not full path; tool cannot disambiguate which CLAUDE.md was intended",
+          "Result reliability is compromised per workspace safety rule: must address files by full path, not basename",
+          "To get reliable backlink count, requery with complete path like 'concept-gate-codex-mcp-wt/CLAUDE.md'"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__B_genuine_zero",
+      "arm": "T2",
+      "case": "B_genuine_zero",
+      "replicate": 1,
+      "prompt_sha256": "415b144b332abc4908001004553b6754a67f059117fe1a7470c293d9570bf193",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other files named 'CLAUDE.md' exist in the vault across different worktrees and archive directories. Backlink resolution may be unreliable due to disambiguation issues. The Obsidian CLI advises resolving by exact path rather than basename."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__B_genuine_zero",
+      "arm": "T2",
+      "case": "B_genuine_zero",
+      "replicate": 2,
+      "prompt_sha256": "415b144b332abc4908001004553b6754a67f059117fe1a7470c293d9570bf193",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files under the vault share the basename 'CLAUDE.md', including copies in archived worktrees and active worktrees (concept-gate-taxonomy, concept-gate-codex-mcp-wt, concept-gate-e2.2-wt, concept-gate-h1-wt, concept-gate-h1a-scope-wt, concept-gate-owl-wt, concept-gate-redteam-wt, and subdirectories thereof). The backlink result must be confirmed by exact path resolution, not basename, to ensure the lookup targeted the intended file."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__B_genuine_zero",
+      "arm": "T2",
+      "case": "B_genuine_zero",
+      "replicate": 3,
+      "prompt_sha256": "415b144b332abc4908001004553b6754a67f059117fe1a7470c293d9570bf193",
+      "response": {
+        "backlink_count": 0,
+        "certain": true,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files in this vault share the basename 'CLAUDE.md' (in archived worktrees, active worktrees, and concept-gate-taxonomy). The lookup ran successfully (live backend), but consumers must resolve by exact path to avoid silent misinterpretation across the multi-worktree workspace.",
+          "The queried path 'CLAUDE.md' appears to refer to the root workspace CLAUDE.md (based on context), but backlinks were measured for an exact-path lookup. Verify which specific CLAUDE.md file is the subject."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__B_genuine_zero",
+      "arm": "T2",
+      "case": "B_genuine_zero",
+      "replicate": 4,
+      "prompt_sha256": "415b144b332abc4908001004553b6754a67f059117fe1a7470c293d9570bf193",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist in the vault across different directories/worktrees. The backlinks lookup may have been ambiguous. Obsidian CLI should be re-queried with full path specification to confirm the result applies to the correct file.",
+          "review_required flag is set to true, indicating human verification is needed before treating this count as authoritative."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__C_all_out_of_scope",
+      "arm": "T2",
+      "case": "C_all_out_of_scope",
+      "replicate": 0,
+      "prompt_sha256": "1e670828526e34c8fb5f56bb6a8505ee9ab5fe977e3ffb4f79ab821f72f7d39a",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "The Obsidian CLI returned 1 result but it was dropped out of scope because the Obsidian app's active vault does not match the requested vault_id. The CLI's vault argument is not reliably honored (measured 2026-08-08). The reported count of 0 cannot be trusted as definitive.",
+          "Basename collision: 11 other files in the vault also named 'CLAUDE.md' across different worktrees. Any exact-path lookup must be confirmed to resolve by full path, not basename, to ensure the correct file is targeted.",
+          "The query path 'CLAUDE.md' is ambiguous and the lookup may have queried the wrong CLAUDE.md. To get a reliable backlink count, specify the exact path (e.g., 'concept-gate-codex-mcp-wt/CLAUDE.md' or 'concept-gate-taxonomy/CLAUDE.md')."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__C_all_out_of_scope",
+      "arm": "T2",
+      "case": "C_all_out_of_scope",
+      "replicate": 1,
+      "prompt_sha256": "1e670828526e34c8fb5f56bb6a8505ee9ab5fe977e3ffb4f79ab821f72f7d39a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "The Obsidian CLI vault matching is unreliable (measured 2026-08-08). The app's active vault may not match the queried vault_id, making this result untrustworthy.",
+          "Basename collision: 11 other files named 'CLAUDE.md' exist across this vault's worktrees (archive and active). Any backlink lookup must verify it used exact path resolution, not basename matching.",
+          "1 result was dropped as out-of-scope, suggesting the query may have executed against a different vault context than intended. Treat this as BLOCKED (unverified) rather than confirmed zero."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__C_all_out_of_scope",
+      "arm": "T2",
+      "case": "C_all_out_of_scope",
+      "replicate": 2,
+      "prompt_sha256": "1e670828526e34c8fb5f56bb6a8505ee9ab5fe977e3ffb4f79ab821f72f7d39a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian app's active vault does not match the requested vault_id 'project-in-progress' (measured 2026-08-08)",
+          "11 other files share the basename 'CLAUDE.md' across different worktree locations",
+          "All results were filtered as out-of-scope due to vault mismatch — zero backlinks cannot be confirmed as accurate"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__C_all_out_of_scope",
+      "arm": "T2",
+      "case": "C_all_out_of_scope",
+      "replicate": 3,
+      "prompt_sha256": "1e670828526e34c8fb5f56bb6a8505ee9ab5fe977e3ffb4f79ab821f72f7d39a",
+      "response": {
+        "backlink_count": 0,
+        "certain": false,
+        "caveats": [
+          "Obsidian CLI's active vault may not match vault_id (measured 2026-08-08)",
+          "Result returned 0 but with ALL_RESULTS_OUT_OF_SCOPE error — tool could not confirm result",
+          "11 other CLAUDE.md files exist across workspace with basename collisions",
+          "Do not trust zero-backlinks result without re-checking which vault is open in Obsidian app"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__C_all_out_of_scope",
+      "arm": "T2",
+      "case": "C_all_out_of_scope",
+      "replicate": 4,
+      "prompt_sha256": "1e670828526e34c8fb5f56bb6a8505ee9ab5fe977e3ffb4f79ab821f72f7d39a",
+      "response": {
+        "backlink_count": null,
+        "certain": false,
+        "caveats": [
+          "The Obsidian app's active vault does not match the queried vault_id 'project-in-progress' — the CLI returned results but all fell out-of-scope. Re-check which vault is open in the Obsidian app.",
+          "11 other files in the same vault share the basename 'CLAUDE.md', creating ambiguity about which file the backlinks actually target without exact path verification.",
+          "The result 'zero backlinks' cannot be trusted as definitive until the vault mismatch issue is resolved."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__D_real_hits_with_review",
+      "arm": "T2",
+      "case": "D_real_hits_with_review",
+      "replicate": 0,
+      "prompt_sha256": "9d7d273b34e1bdb96c125f2bbece1e6528bbe2142e3da1a639711d0adb1dacf0",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other files in the vault share the basename 'CLAUDE.md'",
+          "The Obsidian CLI may have resolved the query to a different CLAUDE.md file due to the basename ambiguity",
+          "Backlink results should be confirmed by exact path, not basename, to ensure accuracy"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__D_real_hits_with_review",
+      "arm": "T2",
+      "case": "D_real_hits_with_review",
+      "replicate": 1,
+      "prompt_sha256": "9d7d273b34e1bdb96c125f2bbece1e6528bbe2142e3da1a639711d0adb1dacf0",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other CLAUDE.md files exist across worktrees and archive directories, creating ambiguity for links that reference CLAUDE.md by basename alone",
+          "Backlink count may be incomplete if other files link to CLAUDE.md without full path resolution",
+          "Review required to confirm all links refer to the correct CLAUDE.md file at /Users/jaehyuntak/Desktop/Project_in_progress/CLAUDE.md, not to worktree variants"
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__D_real_hits_with_review",
+      "arm": "T2",
+      "case": "D_real_hits_with_review",
+      "replicate": 2,
+      "prompt_sha256": "9d7d273b34e1bdb96c125f2bbece1e6528bbe2142e3da1a639711d0adb1dacf0",
+      "response": {
+        "backlink_count": 4,
+        "certain": false,
+        "caveats": [
+          "Basename collision: 11 other files in the vault also have the filename 'CLAUDE.md' (in worktrees and archived worktrees). The backlink count of 4 reflects only references to this specific path. Any consumer must resolve by exact path, not basename, to avoid ambiguity. Complete backlink coverage across all 12 CLAUDE.md files would require querying each path individually."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__D_real_hits_with_review",
+      "arm": "T2",
+      "case": "D_real_hits_with_review",
+      "replicate": 3,
+      "prompt_sha256": "9d7d273b34e1bdb96c125f2bbece1e6528bbe2142e3da1a639711d0adb1dacf0",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "Basename collision: 11 other CLAUDE.md files exist in the vault across different directories (archived and active worktrees). Exact-path resolution must be used by consumers to avoid retrieving backlinks for the wrong file."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    },
+    {
+      "trial_id": "T2__D_real_hits_with_review",
+      "arm": "T2",
+      "case": "D_real_hits_with_review",
+      "replicate": 4,
+      "prompt_sha256": "9d7d273b34e1bdb96c125f2bbece1e6528bbe2142e3da1a639711d0adb1dacf0",
+      "response": {
+        "backlink_count": 4,
+        "certain": true,
+        "caveats": [
+          "BASENAME_COLLISION: 11 other files share the basename 'CLAUDE.md' across the vault at different paths (archive worktrees, active worktrees, nested worktree subdirectories). Consumers must resolve by exact path, not basename, to avoid confusion."
+        ]
+      },
+      "execution": {
+        "context_isolation": "workflow_cold_subagent",
+        "tool_access": "description_only",
+        "subject_model": "haiku"
+      }
+    }
+  ]
+}

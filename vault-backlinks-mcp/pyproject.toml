@@ -1,0 +1,18 @@
+[project]
+name = "vault-backlinks-mcp"
+version = "0.1.0"
+description = "Exact-path, live-only Obsidian backlink lookup as a single MCP tool."
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = ["fastmcp"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["vault_backlinks_mcp*"]

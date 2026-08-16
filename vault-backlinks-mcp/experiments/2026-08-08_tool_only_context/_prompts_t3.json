@@ -1,0 +1,55 @@
+{
+  "contract_version": "tool-only-context-manifest-v1",
+  "protocol": {
+    "design_commit": "01ac23e0f30fe80031d7a146689f6866415ba6e4",
+    "subject_model": "haiku",
+    "replicates_per_cell": 5,
+    "context_isolation": "workflow_cold_subagent",
+    "tool_access": "description_only"
+  },
+  "response_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "backlink_count",
+      "certain",
+      "caveats"
+    ],
+    "properties": {
+      "backlink_count": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "description": "The number of files linking to the queried file. Use null if the response does not establish a number."
+      },
+      "certain": {
+        "type": "boolean",
+        "description": "True only if the response establishes the count."
+      },
+      "caveats": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Anything a reader should know before relying on this. Empty list if none."
+      }
+    }
+  },
+  "prompts": [
+    {
+      "trial_id": "T3__B_genuine_zero",
+      "arm": "T3",
+      "case": "B_genuine_zero",
+      "prompt": "vault_backlinks(vault_id: str, path: str, max_results: int = 50) -> dict\n\nExact-path incoming-link lookup for one file in a registered vault.\n\nLive-only: answers come from the Obsidian CLI at call time, never from a\ncached index (see contracts.py's module docstring for why). A failure\n(Obsidian unavailable, IPC pointed at the wrong vault, path not found)\nis always reported as `error` with `backend_used: \"none\"` -- never\nsilently converted to an empty backlink list. Read `review_required` and\n`review_checks` before treating a result as final; a non-empty\n`review_checks` means something needs a human or a follow-up check, not\nthat the call failed. A review check does not by itself mean\n`backlink_count` is wrong or uncertain -- each check has its own scope\n(stated in its `required_action`), which may be unrelated to whether the\ncount for this exact path is correct. When `error` is null and\n`backend_used` is `\"live\"`, `backlink_count` is a real count from this\ncall; do not downgrade your confidence in it just because\n`review_checks` is non-empty -- check whether that specific entry's\nscope actually bears on the count before treating the count as uncertain.\n\n---\n\nYou have access to the tool described above. It was called once, and\nreturned the JSON response below.\n\nResponse:\n{\n  \"contract_version\": \"vault-backlinks-result-v1\",\n  \"vault_id\": \"project-in-progress\",\n  \"path\": \"CLAUDE.md\",\n  \"backend_used\": \"live\",\n  \"backlinks\": [],\n  \"total\": 0,\n  \"dropped_out_of_scope\": 0,\n  \"review_required\": true,\n  \"review_checks\": [\n    {\n      \"code\": \"BASENAME_COLLISION\",\n      \"required_action\": \"11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename.\"\n    }\n  ],\n  \"error\": null\n}\n\nAnswer these three questions about the file that was queried, using only the\nresponse above:\n1. How many other files link to it?\n2. Are you certain of that number?\n3. Are there any caveats a reader should know?",
+      "prompt_sha256": "24575a38e5671c06be42d24af20fa27920b0f2054cf5d03f47aacf24e0baffbe"
+    },
+    {
+      "trial_id": "T3__D_real_hits_with_review",
+      "arm": "T3",
+      "case": "D_real_hits_with_review",
+      "prompt": "vault_backlinks(vault_id: str, path: str, max_results: int = 50) -> dict\n\nExact-path incoming-link lookup for one file in a registered vault.\n\nLive-only: answers come from the Obsidian CLI at call time, never from a\ncached index (see contracts.py's module docstring for why). A failure\n(Obsidian unavailable, IPC pointed at the wrong vault, path not found)\nis always reported as `error` with `backend_used: \"none\"` -- never\nsilently converted to an empty backlink list. Read `review_required` and\n`review_checks` before treating a result as final; a non-empty\n`review_checks` means something needs a human or a follow-up check, not\nthat the call failed. A review check does not by itself mean\n`backlink_count` is wrong or uncertain -- each check has its own scope\n(stated in its `required_action`), which may be unrelated to whether the\ncount for this exact path is correct. When `error` is null and\n`backend_used` is `\"live\"`, `backlink_count` is a real count from this\ncall; do not downgrade your confidence in it just because\n`review_checks` is non-empty -- check whether that specific entry's\nscope actually bears on the count before treating the count as uncertain.\n\n---\n\nYou have access to the tool described above. It was called once, and\nreturned the JSON response below.\n\nResponse:\n{\n  \"contract_version\": \"vault-backlinks-result-v1\",\n  \"vault_id\": \"project-in-progress\",\n  \"path\": \"CLAUDE.md\",\n  \"backend_used\": \"live\",\n  \"backlinks\": [\n    {\n      \"source_path\": \"notes/00-moc/by-source/other.md\",\n      \"link_count\": 1\n    },\n    {\n      \"source_path\": \"notes/00-moc/by-topic/evidence-provenance.md\",\n      \"link_count\": 1\n    },\n    {\n      \"source_path\": \"notes/00-moc/by-topic/vault-architecture.md\",\n      \"link_count\": 1\n    },\n    {\n      \"source_path\": \"notes/00-moc/by-type/documentation.md\",\n      \"link_count\": 1\n    }\n  ],\n  \"total\": 4,\n  \"dropped_out_of_scope\": 0,\n  \"review_required\": true,\n  \"review_checks\": [\n    {\n      \"code\": \"BASENAME_COLLISION\",\n      \"required_action\": \"11 other file(s) under this vault share the basename 'CLAUDE.md': ['archive/worktrees/concept-gate-agent-publish-vault/CLAUDE.md', 'archive/worktrees/concept-gate-e2.1-wt/CLAUDE.md', 'concept-gate-codex-mcp-wt/CLAUDE.md', 'concept-gate-e2.2-wt/CLAUDE.md', 'concept-gate-h1-wt/CLAUDE.md', 'concept-gate-h1a-scope-wt/CLAUDE.md', 'concept-gate-owl-wt/CLAUDE.md', 'concept-gate-redteam-wt/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/claude-provider-adapter/CLAUDE.md', 'concept-gate-taxonomy/.claude/worktrees/input-length-guard/CLAUDE.md', 'concept-gate-taxonomy/CLAUDE.md']. Confirm any consumer resolves by exact path, not basename.\"\n    }\n  ],\n  \"error\": null\n}\n\nAnswer these three questions about the file that was queried, using only the\nresponse above:\n1. How many other files link to it?\n2. Are you certain of that number?\n3. Are there any caveats a reader should know?",
+      "prompt_sha256": "2479319737c0324de585a458265683895c649bd9aacd44472618bc86064d1443"
+    }
+  ]
+}

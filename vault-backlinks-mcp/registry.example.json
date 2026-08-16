@@ -1,0 +1,9 @@
+{
+  "contract_version": "vault-registry-v1",
+  "vaults": {
+    "project-in-progress": {
+      "root": "/Users/jaehyuntak/Desktop/Project_in_progress",
+      "obsidian_vault_name": "Project_in_progress"
+    }
+  }
+}

@@ -1,0 +1,232 @@
+# Operations log — tool-only-context comprehension
+
+Per methodology §1, this is the interpretation commit -- separate from the
+raw results (609a8bb) and the frozen design (857b203). Results are not
+edited here; `evaluate.py` is not edited here either (see §3 below for why
+a discovered gap in it was deliberately left unfixed in this pass).
+
+## 1. Result
+
+`evaluate.py --trials trials.json` (609a8bb, unedited):
+
+```
+EMPIRICAL_TRIAL_SET: provenance contract satisfied
+primary_threshold   (Z1, arm T1, case A_backend_failure): observed=0/5   PASS
+secondary_threshold (Z2, arm T1, case B_genuine_zero):    observed=3/5   FAIL
+```
+
+**Primary threshold passed.** Across all three arms, `Z1` (a confident zero
+claimed for a tool-failure response) was **0/15** total, not just 0/5 in
+T1. Given the shipped `vault_backlinks` docstring (arm T1), no subject ever
+read a `backend_used: "none"` / `error: "..."` response as "zero backlinks".
+This is the specific failure the DO-NOT-BUILD ruling worried about
+(confidently wrong beats honestly failed), and it did not occur even at the
+floor condition (T0, signature only) -- the tool's response shape itself
+(`backlinks: null` vs `[]`, a non-null `error`) appears to carry enough
+signal on its own.
+
+**Secondary threshold failed**, and not narrowly: `Z2` (uncertain about a
+genuine, unambiguous zero) fired in **8/15** trials across all three arms
+(T0: 3/5, T1: 3/5, T2: 4/5). Contrary to the preregistered directional
+prediction for `Z1` (which held, trivially, since `Z1` floor-effected at 0
+everywhere), `Z2` got *worse* with more information, not better -- T2 (full
+docstring + field glossary) was the least confident arm, not the most.
+
+## 2. Why arm T2 did not help with genuine-zero confidence
+
+Reading the actual T1/T2 `B_genuine_zero` responses (both arms, all 10
+trials): every `Z2` case cites the **same** cause, not five different ones.
+Two representative T1 responses, side by side:
+
+```
+certain=true:  "The count of 0 applies only to the exact-path file at
+               .../CLAUDE.md, not to same-named files in other directories."
+certain=false: "Result is uncertain without confirming all consumers use
+               exact-path resolution, not basename matching."
+```
+
+Both responses are reading the *identical* `BASENAME_COLLISION` review
+check. One subject correctly separates "the count is certain" from "here is
+an unrelated caveat about how consumers should resolve paths in general";
+the other conflates the two -- treats the presence of any `review_checks`
+entry as evidence against certainty in the count itself, even though this
+particular check is about resolution discipline generally, not about
+whether backlinks to this exact file were found.
+
+This reads as a **generalization failure specific to the review_check
+mechanism**, not a background-knowledge gap arm T2's glossary could fix:
+T2's added text describes what `review_required`/`review_checks` *mean*
+structurally ("caveats attached to an otherwise-successful lookup") but
+does not say anything about how a caveat's *scope* relates to the
+`backlink_count` field's certainty -- and that is exactly the distinction
+being missed. More words about the fields did not supply the missing
+distinction; if anything, T2's fuller review_checks framing gave the
+model *more* text to treat as a reason to hedge.
+
+## 3. A scorer gap found reading real output, deliberately left unfixed here
+
+`CASE_TRUTH` (evaluate.py, design-frozen at 857b203) declares
+`expect_certain` for every case, but `score_one()` only ever checks it via
+the `Z1`/`Z2` codes, which are hard-coded to cases `A_backend_failure` and
+`B_genuine_zero` specifically. Case `D_real_hits_with_review` also declares
+`expect_certain: True` and no code checks it.
+
+Manually counting `certain` in the raw trial data (not through the
+scorer, since the scorer doesn't check this) shows the **same
+under-confidence pattern recurs in case D**, uncounted:
+
+```
+D_real_hits_with_review   certain=False (should be True)
+  T0: 2/5    T1: 1/5    T2: 3/5
+```
+
+Same shape as the scored `Z2` finding on case B: T2 is again the worst arm.
+This is consistent with §2's diagnosis -- case D's response also carries a
+`BASENAME_COLLISION` review check, and the same caveat-vs-count conflation
+plausibly explains this too, though it is not confirmed with the same rigor
+as the scored finding (no per-response reading was done here, only the
+`certain` field was tallied).
+
+**Why this is not fixed in this commit**: `evaluate.py` is part of the
+frozen design (857b203), and methodology §1's whole point is that results
+must not retroactively edit the design. This gap is a scoring omission, not
+a design decision under dispute -- `CASE_TRUTH` already specified
+`expect_certain` for case D before any trial ran, so wiring it in would not
+change what was measured, only what gets counted. But drawing that line
+correctly in the moment, right after seeing data that makes the fix look
+appealing, is exactly the situation this repo's own precedent warns about.
+The safer choice is to leave `evaluate.py` untouched in this pass and treat
+the fix as an explicit, separately-dated amendment (below), the same
+pattern this workspace already used for a legitimate pre-execution amendment
+(`ea4767d`, cited in the source workspace's methodology doc) -- except this
+one is post-execution, so it produces a **new** scored quantity, not a
+correction to the existing one. The `Z1`/`Z2` primary/secondary results
+above stand as reported.
+
+## 4. What this experiment did not test
+
+- Whether a subject with real tool access (not a shown response) makes the
+  same distinction when it can re-query or ask a follow-up.
+- `vault_search`, or any tool besides `vault_backlinks`.
+- Whether Sonnet/Opus subjects reproduce the T2-is-worst pattern -- Haiku
+  only, per this session's direction for LLM-in-the-loop experiments
+  against this MCP.
+
+## 5. Recommended next steps
+
+1. **Amendment, not a design change**: add a `Z6` code
+   (`"certainty mismatch on a case with a determinate answer, outside the
+   A/B pair"`) to `evaluate.py`, generalizing the existing `stated_a_number`
+   check to read `expect_certain`/`expect_count` from `CASE_TRUTH` directly
+   instead of hard-coding cases A and B. Re-score the *existing* `trials.json`
+   with the corrected evaluator (no new trials needed) and report both the
+   original and corrected numbers side by side.
+2. **Docstring candidate fix**: `server.py`'s `vault_backlinks` docstring
+   could state explicitly that `review_checks` entries are not necessarily
+   about the count's correctness -- e.g. "a review check does not mean the
+   `backlink_count` itself is wrong; read each check's own scope." Testing
+   whether that sentence actually fixes T1/T2's `Z2` rate would be a new,
+   small experiment (same harness, one new arm), not a rerun of this one.
+3. Do **not** conclude from n=5 per cell that the T2-worse-than-T0 direction
+   is a stable effect; the preregistered replicate count was sized to detect
+   `Z1` at the primary threshold's pass/fail bar (0 vs >0), not to estimate
+   a `Z2` rate precisely. Treat "T2 not better, possibly worse" as a
+   motivated hypothesis for the next preregistration, not a settled finding.
+
+## 6. Amendment applied (2026-08-09) — `Z6`, item 1 above
+
+Implemented, proved, and re-scored, per the user's instruction to READ,
+prove the problem, and solve it -- not just recommend a fix.
+
+**Prove**: before touching `score_one()`, ran the real under-confident
+`D_real_hits_with_review` response (`certain: False`, taken verbatim from
+`trials.json`) through the *unmodified* scorer: `score_one(...) -> []`.
+Confirmed the gap is real, not theoretical. Then checked the mirror
+direction -- a confidently-*wrong* `C_all_out_of_scope` response
+(`certain: True`) -- also scored `[]`. That second direction is the more
+dangerous one (a confident answer for a possibly-wrong-vault result, the
+exact DO-NOT-BUILD worry) and was equally unscored.
+
+**Solve**: added `Z6` to `FAILURE_CODES`, and one block to `score_one()`
+that reuses the existing `stated_a_number` computation against
+`CASE_TRUTH[case]["expect_certain"]`, scoped with `if case not in
+("A_backend_failure", "B_genuine_zero")` so it cannot alter what `Z1`/`Z2`
+already mean or count. `test_protocol.py`'s
+`test_every_declared_failure_code_is_reachable` was extended with a `Z6`
+probe (it correctly failed before that addition, proving the reachability
+gate itself works).
+
+**Verified by mutation, not assumed**: reverted the new `Z6` block to a
+no-op in a throwaway copy. Both self-test `Z6` probes flipped to `MISS` and
+the reachability test failed exactly as expected. Restored the real file
+from the pre-mutation backup; `git diff --stat` showed only the intended
+44-line addition, confirming no other line moved.
+
+**Re-scored `trials.json` (unedited) with the amended evaluator** --
+`Z1`/`Z2`/primary/secondary are byte-identical to §1's original numbers, as
+designed. New `Z6` counts, matching this log's §3 manual tally exactly:
+
+```
+T0__D_real_hits_with_review   Z6: 2/5
+T1__D_real_hits_with_review   Z6: 1/5
+T2__D_real_hits_with_review   Z6: 3/5
+*__C_all_out_of_scope         Z6: 0/5  (all three arms -- the dangerous
+                                        direction did not occur in this data)
+```
+
+Full output: `amended_scoring_20260809.txt`. This confirms the T2-worst
+pattern from §2/§3 is not confined to case B: it reproduces on case D with
+the same shape (T1 best, T2 worst), now via a scored code instead of a
+manual count -- still not proof of a stable effect at n=5 (§5 item 3 still
+applies), but no longer resting on an ad hoc tally outside the evaluator.
+
+## 7. T3 result (2026-08-09) — the docstring fix, tested with Haiku
+
+Per the user's instruction to READ/prove/solve rather than stop at a
+recommendation: §5 item 2's candidate docstring fix was applied to
+`server.py` (d203a12) and re-tested with 10 fresh Haiku trials (296e56a),
+targeting only the two cells that actually failed.
+
+```
+                          T0    T1    T2    T3 (fixed docstring)
+B_genuine_zero   Z2:      3/5   3/5   4/5   1/5
+D_real_hits      Z6:      2/5   1/5   3/5   0/5
+```
+
+**The fix worked**, on this data. `D_real_hits_with_review` went from a
+worst-case 3/5 (T2) to 0/5 (T3) -- every one of the 5 fresh trials correctly
+stated `certain: true` for the determinate 4-backlink count.
+`B_genuine_zero` improved from 3-4/5 down to 1/5, not to 0/5. Reading the
+one remaining `Z2` trial (T3, replicate 2): the subject explicitly reasoned
+that basename collision could mean *the CLI itself resolved to the wrong
+file*, not that the returned count for the resolved file was uncertain --
+"The 0 backlinks count applies only to whichever file the CLI selected. To
+get a definitive answer, use the full path." This is a **different, more
+defensible** failure mode than what T1/T2 exhibited (conflating an unrelated
+caveat with count uncertainty): it is skepticism about which file was
+actually queried, a question the fixed docstring's added text does not
+address (it only disambiguates the *meaning* of `review_checks`, not
+whether the CLI honored `vault_id`/`path` correctly) -- and per
+`obsidian_backend.py`'s own documented measurement, that skepticism is not
+unfounded in general, just misapplied here (the response gives an exact
+`path` and the count is genuinely for that path).
+
+**Caveats on this result, stated plainly**:
+- n=5 per cell, same as the original design -- §5 item 3's caution about
+  not over-reading small samples applies here too.
+- T3 was compared against T0/T1/T2's *already-collected* trials, not run
+  in the same batch -- no new confound is expected (same fixtures, same
+  model, same task text) but this is a between-batches comparison, not a
+  single randomized run.
+- Only the two failing cells were re-tested; T3's behavior on
+  `A_backend_failure`/`C_all_out_of_scope` is unmeasured (though those
+  scored clean in every prior arm, so a regression there is unlikely, not
+  ruled out).
+
+**Conclusion**: the docstring fix is a legitimate, working mitigation for
+the caveat-scope conflation this experiment found, worth shipping. It does
+not fully close `Z2` for case B, and the residual failure looks like
+appropriate caution about a different, real risk (`vault_id` mismatch) that
+this docstring was never trying to address -- see `obsidian_backend.py`'s
+own module docstring for that risk's actual mitigation (the
+`exists_under_root` cross-check, not agent-facing wording).
