@@ -51,8 +51,18 @@ CONTRACTS_SOURCE = (PKG / "contracts.py").read_text(encoding="utf-8")
 
 
 def _codes_in_source() -> set[str]:
-    """Guard codes as they actually appear in the module under test."""
-    return set(re.findall(r'"code":\s*"([A-Z_]+)"', CONTRACTS_SOURCE))
+    """Guard codes as they actually appear in the module under test.
+
+    `[A-Z0-9_]+`, not `[A-Z_]+`. The narrower class silently skipped any
+    future code containing a digit, which made the completeness meta-guard
+    vacuous for exactly the guards it was written to catch. Confirmed by
+    poison test (2026-08-17): appending `{"code": "STALE_INDEX_V2"}` to
+    contracts.py with no registered witness left the meta-guard passing;
+    widening the class makes it fail as intended. No current code has a
+    digit -- this protects the guards nobody has written yet, which is the
+    only thing this meta-guard is for.
+    """
+    return set(re.findall(r'"code":\s*"([A-Z0-9_]+)"', CONTRACTS_SOURCE))
 
 
 @dataclass(frozen=True)
