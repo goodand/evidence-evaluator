@@ -30,6 +30,8 @@ That test is the reason the rest of this file cannot quietly decay.
 """
 from __future__ import annotations
 
+import importlib
+import os
 import re
 import subprocess
 import sys
@@ -45,6 +47,14 @@ import pytest  # noqa: E402
 import contracts  # noqa: E402
 from registry import VaultEntry  # noqa: E402
 from obsidian_backend import ObsidianUnavailable  # noqa: E402
+# Imported directly, NOT read off `contracts`. `contracts` binds this name to
+# None when VAULT_BACKLINKS_FILESYSTEM_FALLBACK is off at import time, so
+# reading it from there would make these witnesses depend on the ambient
+# environment. See `_query` and
+# `test_the_fallback_witness_does_not_depend_on_import_time_configuration`.
+from obsidian_backend_evidence import (  # noqa: E402
+    filesystem_fallback_backlinks as _real_filesystem_fallback,
+)
 
 
 CONTRACTS_SOURCE = (PKG / "contracts.py").read_text(encoding="utf-8")
@@ -106,6 +116,17 @@ def _query(registry, monkeypatch, *, cli_returns=None, cli_raises=False,
     monkeypatch.setattr(contracts, "fetch_backlinks", fetch)
     monkeypatch.setattr(contracts, "confirm_active_vault", lambda root: active_vault)
     monkeypatch.setattr(contracts, "FILESYSTEM_FALLBACK_ENABLED", fallback)
+    # Both halves of the fallback switch, not just the flag. `contracts` reads
+    # the environment at IMPORT time and binds `filesystem_fallback_backlinks`
+    # to None when the fallback is off, and the production check is
+    # `FILESYSTEM_FALLBACK_ENABLED and filesystem_fallback_backlinks is not
+    # None`. Patching only the flag left that `and` half at whatever the
+    # ambient environment produced, so the FILESYSTEM_FALLBACK_USED witness
+    # passed or failed depending on how the suite was invoked -- adversarial
+    # review F2 (2026-08-17), confirmed by running the witness alone under
+    # VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0.
+    monkeypatch.setattr(contracts, "filesystem_fallback_backlinks",
+                        _real_filesystem_fallback if fallback else None)
     return contracts.query_backlinks("t1", path, max_results=max_results,
                                      registry=registry)
 
@@ -256,6 +277,50 @@ def test_the_registry_does_not_claim_guards_that_no_longer_exist():
         f"registered witness(es) for code(s) absent from contracts.py: "
         f"{sorted(stale)}"
     )
+
+
+def test_the_fallback_witness_does_not_depend_on_import_time_configuration(
+    tmp_path, monkeypatch
+):
+    """A witness whose verdict changes with the ambient environment is not a
+    witness.
+
+    `contracts` decides at IMPORT time whether the filesystem fallback exists
+    at all, binding `filesystem_fallback_backlinks` to None when the operator
+    has switched it off. Before this test existed, the
+    FILESYSTEM_FALLBACK_USED witness patched only the boolean flag, so under
+    `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0` it could not fire and the witness
+    FAILED -- but only when run alone. Inside the full suite it passed,
+    because `test_contracts.py` calls `importlib.reload(contracts)` after
+    `monkeypatch.delenv(...)`, and monkeypatch cannot undo a reload. That
+    reload silently reconfigured the module to "fallback enabled" for every
+    test that ran afterwards, masking the dependency.
+
+    So this test builds the hostile world deliberately rather than trusting
+    the suite to have wiped it, and restores the interpreter afterwards --
+    including the reload, which is the part the leaking test forgot.
+    """
+    original = os.environ.get("VAULT_BACKLINKS_FILESYSTEM_FALLBACK")
+    try:
+        os.environ["VAULT_BACKLINKS_FILESYSTEM_FALLBACK"] = "0"
+        importlib.reload(contracts)
+        assert contracts.filesystem_fallback_backlinks is None, (
+            "the hostile world this test needs no longer exists -- contracts "
+            "kept the fallback bound with the switch off, so this test can no "
+            "longer prove anything and must be rewritten, not deleted."
+        )
+        witness = GUARD_WITNESSES["FILESYSTEM_FALLBACK_USED"](tmp_path, monkeypatch)
+        assert "FILESYSTEM_FALLBACK_USED" in _codes(witness.positive()), (
+            "the fallback witness stopped firing when the fallback was "
+            "disabled at import time. It is reporting the environment it ran "
+            "in, not the guard it is supposed to witness."
+        )
+    finally:
+        if original is None:
+            os.environ.pop("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", None)
+        else:
+            os.environ["VAULT_BACKLINKS_FILESYSTEM_FALLBACK"] = original
+        importlib.reload(contracts)
 
 
 @pytest.mark.parametrize("code", sorted(GUARD_WITNESSES))
