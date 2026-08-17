@@ -166,7 +166,103 @@ production에서 이 기본값은 **도달 불가능**하다 — 즉 이 mutant�
 **즉시 할 수 있는 것은 ①뿐이다.** ②는 준비 작업이 있고, ③의 3분의 1은 이미
 하고 있다.
 
-## 5. 이 문서가 주장하지 않는 것
+## 5. 2차 응답과 후속 검증 (같은 날)
+
+조사자에게 위 실측을 전달했고, **두 건을 스스로 정정**하고 자기 권고 2위를
+철회했다.
+
+### 5a. 조사자의 정정
+
+1. **3축(reachability / oracle / input-fixture)은 확립된 단일 taxonomy가
+   아니다** — 이 프로젝트 9건에 맞춰 합성한 분석 틀이다. 각 축은 기존 문헌
+   개념과 대응하지만 묶음 자체가 표준은 아니다.
+2. **(c)에서 spy 추가를 "Oracle 축 강화"라 한 것은 너무 넓었다.** spy가
+   증명한 것은 semantic correctness가 아니라 **interaction이 발생했다**는
+   것뿐이다. 정확히는 *interaction observability는 확보, output
+   discriminability와 fixture adequacy는 미확보*.
+
+### 5b. mutmut 내부 주장 — 소스로 검증 완료
+
+조사자가 소스를 보지 않고 주장한 실행 모델을 실제 코드로 확인했다:
+
+```python
+# mutmut/__main__.py:264
+def setup_source_paths() -> None:
+    # ensure that the mutated source code can be imported by the tests
+    ...  sys.path.insert(0, str(mutated_path.absolute()))
+    # ensure that the original code CANNOT be imported by the tests
+    ...  del sys.path[i]          ← 원본 경로를 의도적으로 제거
+```
+
+`copy_src_dir()`(195), `setup_source_paths()`(264),
+`change_cwd("mutants")`(479·483·487) 전부 존재. **내가 겪은 import 충돌은
+설정 실수가 아니라 mutmut 3의 실행 모델 그 자체다.** 원본 경로를 의도적으로
+제거하므로 `sys.path`를 조작하는 테스트는 구조적으로 깨지고, 설정으로 해결되지
+않는다.
+
+여기서 나온 일반 규칙 — 다음 mutation 도구를 고를 때 operator 품질보다 먼저
+물을 것:
+
+> **Does its execution model preserve our real pytest/import environment?**
+
+### 5c. `DEAD-CONTRACT` — 새 분류, 그리고 실측으로 확정
+
+조사자가 survivor 상태에 4번째를 추가했다:
+
+```
+ACTIONABLE          production 동작을 바꾸며 test가 놓침
+EQUIVALENT          production 도달 가능 영역에서 동작 동일
+UNKNOWN             판정 비용이 높음
+DEAD-CONTRACT       mutant는 equivalent이지만, 그 사실이 불필요한
+                    fallback/분기를 드러냄        ← 신규
+```
+
+**이 분류가 없으면 554 survivor가 "554개의 테스트 결함"으로 부풀려지고,
+mutation testing이 test-quality 도구가 아니라 triage backlog 생성기가 된다.**
+
+`depth.get(path, 0)`을 이 분류로 판정하기 전에 **읽기가 아니라 계측으로**
+확인했다 — 실제 vault 5질의 × seed 2종:
+
+```
+graph_channel_order 호출 : 50
+depth에 없던 경로        : 0
+→ DEAD-CONTRACT 확정 (기본값이 한 번도 쓰이지 않음)
+```
+
+따라서 `depth.get(path, 0)` → `depth[path]`로 바꿨다. 죽은 분기를 지우고,
+그 불변식이 깨지면 조용히 틀린 정렬 키 대신 `KeyError`가 나게 했다.
+
+### 5d. 채택 — 1순위 구현 완료
+
+**Guard Witness Registry**를 vault-backlinks-mcp에 구현했다
+(`tests/test_guard_witness.py`, 커밋 `63a0646`). 가드 코드 11개 각각에
+**발화해야 하는 세계**와 **침묵해야 하는 세계**를 등록한다.
+
+negative witness가 load-bearing이다 — 무조건 발화하는 가드는 어떤 positive
+검사도 통과한다. 이 프로젝트에서 `review_required`가 정보량 0이 된 경로가
+정확히 그것이었다.
+
+**레지스트리 자체가 가드이므로 같은 대우를 했다.** 가드를 추가하고 등록을
+잊으면 이 파일이 조용히 커버리지를 잃는다 — 이미 두 번 겪은 "게이트가
+게이트를 가림"과 같은 형태다. 그래서
+`test_every_guard_in_the_source_is_registered`가 `contracts.py`에서 코드를
+직접 파싱해 대조하고, 반대 방향(삭제된 가드의 witness가 남아 허위 커버리지를
+주장하는 것)도 검사한다.
+
+양방향 poison test로 검증:
+
+| mutation | 결과 |
+|---|---|
+| `contracts.py`에 미등록 가드 주입 | 완전성 테스트 **FAIL** (의도대로) |
+| `if is_symlink_under_root(...)` → `if True` | SYMLINK_TARGET negative witness **FAIL** (의도대로) |
+
+되돌리면 둘 다 통과. **88 passed** (64 + 신규 24).
+
+witness를 만드는 작업 자체가 검사였다 — positive witness를 구성할 수 없는
+가드는 도달 불가능한 가드이고, 그게 결함이지 테스트의 공백이 아니다.
+11개 전부 구성 가능했다.
+
+## 6. 이 문서가 주장하지 않는 것
 
 - **응답의 문헌 인용을 검증하지 않았다.** 논문 존재·수치·연도를 확인하지
   않았고, 인용이 정확하다고 보증하지 않는다.

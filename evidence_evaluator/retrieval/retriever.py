@@ -108,7 +108,15 @@ def graph_channel_order(
             (lexical_rank.get(parent, worst_lexical) for parent in parents),
             default=worst_lexical,
         )
-        return (-len(parents), depth.get(path, 0), best_parent, path)
+        # `depth[path]`, not `.get(path, 0)`. Mutation analysis (2026-08-17)
+        # found the default surviving every test, and instrumenting the real
+        # vault confirmed why: `graph_depth.setdefault()` runs for every
+        # neighbour the walk touches, so across 50 calls not one path was
+        # missing. The default was unreachable -- a defensive-looking branch
+        # that no caller could enter and no test could exercise. Indexing
+        # directly turns a silently-wrong sort key into a KeyError if that
+        # invariant ever breaks.
+        return (-len(parents), depth[path], best_parent, path)
 
     return sorted(discovered_paths, key=key)
 
