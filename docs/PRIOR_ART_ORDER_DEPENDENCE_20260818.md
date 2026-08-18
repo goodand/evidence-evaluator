@@ -139,12 +139,41 @@ F5: witness가 `review_checks`의 `code` 필드 존재만 확인하고 `required
 - Defects4J / BugsInPy의 buggy/fixed revision 관행
 - "Python flaky test 7,571건 중 59%가 order dependency" 수치
 - iPFlakies의 알고리즘 세부
-- SARIF 2.1.0의 `executionSuccessful` / `toolExecutionNotifications` 의미
 - Nagios `UNKNOWN`의 정식 정의
 - Claude Code / OpenAI Agents SDK 샌드박스 세부
 
-이 중 **SARIF는 검증할 값이 크다** — 사실이면 외부 출력 형식을 표준으로 갈아탈 수
-있고, 도구 생태계가 붙어 온다. 다음 조사 대상으로 남긴다.
+### 정정 — SARIF는 위임 없이 직접 확인했다 (2026-08-18, 같은 날 추가)
+
+이 문서를 커밋한 직후, "논문·규격에 접근할 수 없다"가 **내가 확인하지 않은
+가정**이었음을 발견했다. 웹 조회 도구가 있었다. 두 번의 조회로 결론이 났다.
+
+규격 본문은 커서 해당 절 앞에서 잘렸지만 목차에서 세 속성의 존재가 확인된다
+(`executionSuccessful` §3.20.14, `toolExecutionNotifications` §3.20.21,
+`results` §3.14.23). 결정적인 것은 공식 JSON 스키마다:
+
+- `invocation.executionSuccessful` — **필수** boolean.
+  *"Specifies whether the tool's execution completed successfully."*
+- `run.results` — 선택 배열.
+  *"The results array can be omitted when a run is solely exporting rules
+  metadata. It must be present (but may be empty) if a log file represents an
+  actual scan."*
+
+**부재와 빈 배열이 의미상 구별된다.** 조사자의 주장은 실질적으로 확증됐고, 이
+하네스의 핵심 규칙("실행되지 않은 검사는 통과한 검사가 아니다")이 이미 표준에
+있다. 첫 적대적 검증의 `refuted: []`를 "반박 없음"으로 읽은 오독은, SARIF 용어로는
+`executionSuccessful=false`인 run의 결과를 완전한 것으로 취급한 것에 해당한다.
+
+**다만 대체재는 아니다.** `executionSuccessful`은 invocation 단위 boolean이라
+"5개 검사 중 3개만 실행됨"을 표현하지 못한다. 이 하네스의 `checks_skipped` /
+`CHECK_DID_NOT_RUN`이 더 세밀하다. 검사 단위 미실행을 SARIF로 실으려면
+`toolExecutionNotifications`에 태워야 하고, 그 의미론은 아직 확인하지 않았다.
+
+판정: **외부 export adapter로 채택할 값이 있다. 내부 계약의 대체재는 아니다.**
+조사자의 "내부 계약 유지 + SARIF adapter 추가" 권고와 일치한다.
+
+교훈은 도구가 아니라 나에 대한 것이다. **"접근할 수 없다"고 적기 전에 접근을
+시도해야 한다.** 이 문서의 원래 §6이 미검증 목록을 "논문 접근 없음"으로 뭉갠 것은,
+이 세션이 반복해서 지적해온 "확인하지 않은 것을 확인된 제약처럼 적는" 패턴이다.
 
 조사자가 스스로 "Wolfram으로 형식화", "Ace Knowledge Graph에 저장"을 언급했는데,
 그 산출물은 이 검증에서 사용하지 않았다. 3상태 집계 대수
