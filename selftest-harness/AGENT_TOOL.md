@@ -69,7 +69,7 @@ So a check reports one of three states, never two, and the third one blocks.
 
 ## Validation
 
-`selftest-harness/test_separation.py` — 11 cases.
+`selftest-harness/test_separation.py` — 12 cases.
 
 A clean fixture repository returns `complete` with nothing skipped. Each of
 `SUITE_NOT_GREEN`, `WORKTREE_DIRTY`, `GUARD_WITHOUT_WITNESS`, `ENV_SENSITIVE`,
@@ -79,13 +79,26 @@ So the normal path stays quiet while every named class can be shown speaking.
 A meta-guard reads this tool's own `REQUIRED_ACTIONS` and fails on any code with
 no case in the dataset, so a code cannot be added as decoration.
 
-Poison-tested three ways (2026-08-17):
+Poison-tested four ways:
 
 | mutation | result |
 |---|---|
 | skipped checks no longer block `complete` | both skip cases FAILED |
 | a decorative code with no fixture added | meta-guard FAILED |
 | `[A-Z0-9_]+` narrowed to `[A-Z_]+` | digit-code case FAILED (upstream: vault-backlinks-mcp `95aefdb`) |
+| order check run in the default configuration only | cross-configuration case FAILED |
+
+The fourth was not hypothetical. It reproduces a false negative this harness
+shipped with, and it was confirmed end-to-end against the defect-bearing
+revision: before the fix the harness reported `ORDER_DEPENDENT: passed` on
+`95aefdb`; after it, `outcomes changed with test order under 1 of 2
+configuration(s)`, naming
+`test_guard_fires_on_its_positive_witness[FILESYSTEM_FALLBACK_USED]`.
+
+Proving a detector on the revision where the defect still lives is deliberate.
+The fix for that defect normalized the module state that produced the
+asymmetry, so on the current tree no detector can reproduce it — the repair
+destroyed the evidence that the detector works.
 
 ## What It Does Not Establish
 
@@ -96,10 +109,29 @@ Poison-tested three ways (2026-08-17):
   reports `CHECK_DID_NOT_RUN`, not "insensitive".
 - **`ORDER_DEPENDENT` is delegated** to the target repo's own
   `scripts/order_independence_check.py`, so the harness inherits that tool's
-  limits: cross-file only (same-file leakage is invisible), and only dependence
-  that manifests in the environment it runs in. Measured: against the pre-fix
-  tree it named the F2 defect under `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0` and
-  found nothing in the default environment.
+  limits: **cross-file only** — two tests leaking into each other inside one
+  file stay together in both runs and are invisible.
+  It runs under the default configuration *and* every `--env` configuration,
+  which is not optional. The first version of this check ran once, in the
+  ambient environment, and reported `passed` against `vault-backlinks-mcp`
+  `95aefdb` where the dependence provably exists — a false negative in this
+  harness, found while verifying an external prior-art report.
+  Measured on that tree: the dependence appears under
+  `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0` and never in the default
+  environment. So a configuration you do not pass is a configuration nobody
+  checked.
+- **`pytest-randomly` is item-level and this checker is not.** Measured on the
+  same tree, `pytest-randomly 4.1.0` (Python 3.13.13, pytest 9.1.1) surfaced
+  the same defect on **23 of 40 seeds** under the hostile environment and **0 of
+  15** by default. A single random-seed run therefore misses it ~43% of the
+  time, which is why adopting it as a regression gate requires **pinned seeds**,
+  not its default behaviour. Until that is wired in, this checker's advantage is
+  determinism, not coverage.
+  `detect-test-pollution 1.2.0` installs and runs on this stack but **cannot
+  address this defect class**: it requires the failing test to pass in
+  isolation, and the F2 witness does the opposite (fails alone, passes in the
+  suite) — a *brittle* test, not a *victim*.
+  Details and measurements: `docs/PRIOR_ART_ORDER_DEPENDENCE_20260818.md`.
 - **`GUARD_WITHOUT_WITNESS` matches a spelling.** It finds `"code": "X"`
   literals. A project that names guards differently gets
   `CHECK_DID_NOT_RUN`, which is the honest answer, not silence.

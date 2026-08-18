@@ -182,6 +182,48 @@ def test_order_dependence_is_relayed_from_the_repos_own_checker(tmp_path):
     assert "ORDER_DEPENDENT" in codes(result)
 
 
+def test_order_dependence_is_looked_for_under_every_declared_environment(tmp_path):
+    """The order check must run under each `--env` configuration, not only the
+    default one.
+
+    This is a regression guard for a false negative this harness actually had.
+    Its first version ran the checker once, in the ambient environment, and
+    reported `ORDER_DEPENDENT: passed` against vault-backlinks-mcp `95aefdb` --
+    a tree where the dependence provably exists. Measured on that tree: the
+    dependence appears under `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0` and never
+    in the default environment (0 of 15 pytest-randomly seeds by default, 23 of
+    40 under the hostile setting). A detector run in the wrong configuration is
+    not a detector.
+
+    The fixture's checker is silent by default and fires only when the variable
+    is set, so a harness that skips the non-default configurations cannot pass.
+    """
+    files = dict(CLEAN_FILES)
+    files["scripts/order_independence_check.py"] = (
+        "import os, sys\n"
+        "if os.environ.get('SELFTEST_HARNESS_SWITCH') == '0':\n"
+        "    print('ORDER-DEPENDENT: only visible under this configuration')\n"
+        "    sys.exit(1)\n"
+        "sys.exit(0)\n")
+    repo = _repo(tmp_path, extra=files)
+
+    quiet = run_harness(repo, "--guard-source", "src/guards.py",
+                        "--guard-registry", "tests/test_witness.py",
+                        "--env", "SELFTEST_HARNESS_UNRELATED=1")
+    assert "ORDER_DEPENDENT" not in codes(quiet), (
+        "the fixture checker fired in a configuration where it should be silent"
+    )
+
+    found = run_harness(repo, "--guard-source", "src/guards.py",
+                        "--guard-registry", "tests/test_witness.py",
+                        "--env", "SELFTEST_HARNESS_SWITCH=0")
+    assert "ORDER_DEPENDENT" in codes(found), (
+        "the order check was not run under the declared --env configuration, so "
+        "an order dependence invisible in the default environment goes "
+        "unreported -- the exact false negative this test exists to prevent"
+    )
+
+
 # --- the load-bearing rule ------------------------------------------------
 
 def test_a_check_that_cannot_run_is_reported_not_dropped(tmp_path):

@@ -130,26 +130,64 @@ def check_suite_green(repo: Path) -> Check:
                  f"{len(outcomes)} tests, none failing", {"total": len(outcomes)})
 
 
-def check_order_independence(repo: Path) -> Check:
+def check_order_independence(repo: Path, env_matrix: list[dict]) -> Check:
     """Delegates to the target repo's own checker when it has one, rather than
     keeping a second implementation of the same comparison in this file. The
     project rule is one canonical copy; a harness that re-implements what it
-    audits becomes the thing that drifts."""
+    audits becomes the thing that drifts.
+
+    Runs the checker under the DEFAULT configuration and under every `--env`
+    configuration, because an order dependence can be entirely invisible in
+    one and obvious in another. This is not defensive speculation -- the first
+    version of this function ran the checker once, in the default environment,
+    and returned `ORDER_DEPENDENT: passed` on a tree where the dependence
+    demonstrably existed (vault-backlinks-mcp `95aefdb`, the F2 defect). It was
+    a false negative in this harness.
+
+    Measured on that tree: the order dependence surfaced under
+    `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0` and never in the default
+    environment -- 0 of 15 pytest-randomly seeds found it by default, 23 of 40
+    found it under the hostile setting. The environment is not a detail the
+    detector can be run without.
+
+    See docs/PRIOR_ART_ORDER_DEPENDENCE_20260818.md.
+    """
     script = repo / "scripts" / "order_independence_check.py"
     if not script.exists():
         return Check("ORDER_DEPENDENT", "did_not_run",
                      f"no order-independence checker at {script.relative_to(repo)}; "
                      "this class of defect was NOT examined")
-    proc = subprocess.run([sys.executable, str(script)], cwd=repo,
-                          capture_output=True, text=True)
-    if proc.returncode == 0:
-        return Check("ORDER_DEPENDENT", "passed", "no cross-file order dependence",
-                     {"note": "same-file leakage is not covered; see the script"})
-    if proc.returncode == 1:
-        return Check("ORDER_DEPENDENT", "fired", "outcomes changed with test order",
-                     {"report": proc.stdout[-2000:]})
-    return Check("ORDER_DEPENDENT", "did_not_run",
-                 f"checker exited {proc.returncode}", {"stderr": proc.stderr[-1000:]})
+    # `None` is the default configuration, and it goes first so its report is
+    # the one a reader sees when several configurations fire.
+    configs: list[dict | None] = [None, *env_matrix]
+    fired = []
+    for config in configs:
+        environ = dict(os.environ)
+        for key, value in (config or {}).items():
+            if value is None:
+                environ.pop(key, None)
+            else:
+                environ[key] = value
+        proc = subprocess.run([sys.executable, str(script)], cwd=repo,
+                              capture_output=True, text=True, env=environ)
+        if proc.returncode == 1:
+            fired.append({"env": config or "default",
+                          "report": proc.stdout[-1500:]})
+        elif proc.returncode != 0:
+            return Check("ORDER_DEPENDENT", "did_not_run",
+                         f"checker exited {proc.returncode} under "
+                         f"{config or 'default'}",
+                         {"stderr": proc.stderr[-1000:]})
+    if fired:
+        return Check("ORDER_DEPENDENT", "fired",
+                     f"outcomes changed with test order under "
+                     f"{len(fired)} of {len(configs)} configuration(s)",
+                     {"configurations": fired})
+    return Check("ORDER_DEPENDENT", "passed",
+                 f"no cross-file order dependence under {len(configs)} "
+                 f"configuration(s)",
+                 {"note": "same-file leakage is not covered; see the script. "
+                          "Only the configurations passed via --env were tried."})
 
 
 def check_env_sensitivity(repo: Path, env_matrix: list[dict]) -> Check:
@@ -237,7 +275,7 @@ def evaluate(repo: Path, env_matrix: list[dict], guard_source: str | None,
     checks = [
         check_worktree_clean(repo),
         check_suite_green(repo),
-        check_order_independence(repo),
+        check_order_independence(repo, env_matrix),
         check_env_sensitivity(repo, env_matrix),
         check_guard_witnesses(repo, guard_source, guard_registry),
     ]
