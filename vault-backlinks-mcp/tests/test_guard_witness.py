@@ -421,6 +421,79 @@ def test_the_fallback_witness_does_not_depend_on_import_time_configuration(
         importlib.reload(contracts)
 
 
+def _assert_result_invariants(result: dict, where: str) -> None:
+    """Properties that must hold in EVERY world, guard-firing or not.
+
+    F5 (adversarial review 2026-08-17) said witness assertions ignore
+    everything except the code, so a guard could fire with a wholly wrong
+    payload. Measuring the claim narrowed it twice (2026-08-22):
+
+      * All 11 guards carry exactly {code, required_action} -- there is no
+        numeric payload INSIDE a check, so `_codes()` drops only prose.
+      * The numeric fields are top-level, and two tests in test_contracts.py
+        DO pin them with strong value-fixing oracles (`total == 5`,
+        `dropped_by_reason["malformed"] == 1`, plus a negative assertion).
+        Poison-confirmed: reverting `total` to the pre-v2 post-truncation bug
+        fails test_max_results_truncation_is_flagged; zeroing
+        `dropped_by_reason` fails test_drop_reasons_are_not_all_reported_as_
+        vault_mismatch.
+
+    What remained was the generalisation: those oracles pin values only in
+    the two worlds those tests build. The other nine guards' worlds had
+    nothing checking the numbers at all.
+
+    Invariants rather than 11 hand-written `expected_payload` specs, on
+    purpose. A per-guard expected payload would have to restate prose (which
+    makes the test brittle the moment wording improves -- the
+    "do not pin prose" caution in HARNESS_KNOWHOW) and would need a new spec
+    for every guard added. These hold in all 22 witness worlds by
+    construction, and they are the arithmetic a caller actually branches on.
+    """
+    assert result["returned_count"] == len(result["backlinks"] or []), (
+        f"{where}: returned_count disagrees with the list it describes -- "
+        f"{result['returned_count']} vs {len(result['backlinks'] or [])}"
+    )
+    assert result["total"] >= result["returned_count"], (
+        f"{where}: total ({result['total']}) is below returned_count "
+        f"({result['returned_count']}) -- this is the pre-v2 bug shape, where "
+        f"`total` was computed after truncation and a caller could not tell "
+        f"'there is one backlink' from 'you only asked to see one'"
+    )
+    by_reason = result["dropped_by_reason"]
+    assert set(by_reason) == {"malformed", "forbidden", "out_of_scope"}, (
+        f"{where}: dropped_by_reason lost or gained a reason key: "
+        f"{sorted(by_reason)}"
+    )
+    assert result["dropped_out_of_scope"] == by_reason["out_of_scope"], (
+        f"{where}: dropped_out_of_scope ({result['dropped_out_of_scope']}) "
+        f"disagrees with dropped_by_reason['out_of_scope'] "
+        f"({by_reason['out_of_scope']}) -- the two fields describe the same "
+        f"drops and a caller reading either must get the same answer"
+    )
+    assert all(count >= 0 for count in by_reason.values()), (
+        f"{where}: a negative drop count: {by_reason}"
+    )
+    for check in result["review_checks"]:
+        assert len(check.get("required_action", "")) >= 40, (
+            f"{where}: {check.get('code')} carries a missing or stub "
+            f"required_action -- review_required with no instruction is a "
+            f"warning, not a contract"
+        )
+
+
+@pytest.mark.parametrize("code", sorted(GUARD_WITNESSES))
+def test_result_invariants_hold_in_every_witness_world(code, tmp_path, monkeypatch):
+    """The invariants above, in both worlds of every registered guard.
+
+    This is the axis `_codes()` was missing, added once instead of eleven
+    times. Twenty-two worlds get the arithmetic checked; a twelfth guard gets
+    it for free.
+    """
+    witness = GUARD_WITNESSES[code](tmp_path, monkeypatch)
+    _assert_result_invariants(witness.positive(), f"{code} positive")
+    _assert_result_invariants(witness.negative(), f"{code} negative")
+
+
 @pytest.mark.parametrize("code", sorted(GUARD_WITNESSES))
 def test_guard_fires_on_its_positive_witness(code, tmp_path, monkeypatch):
     witness = GUARD_WITNESSES[code](tmp_path, monkeypatch)
