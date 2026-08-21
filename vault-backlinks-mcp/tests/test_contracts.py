@@ -306,6 +306,52 @@ def test_max_results_truncation_is_flagged(vault, monkeypatch):
     assert "TRUNCATED" in codes
 
 
+def test_truncation_alone_sets_review_required(vault, monkeypatch):
+    """F4 (adversarial review 2026-08-17, re-confirmed on this tree
+    2026-08-22): `review_required = bool(review_checks) or truncated` -- and
+    nothing anywhere in the suite pinned the `or truncated` term. Removing it
+    left the whole suite green, because `review_checks` in that expression is
+    evaluated BEFORE the TRUNCATED entry is appended to the result. This is
+    the one field the calling agent actually branches on: a truncated result
+    with review_required=false means the caller answers from a silently
+    partial pool and skips the required action. That state existed for real --
+    a dead verification agent left `review_required: False` hardcoded in this
+    module and 88 tests passed.
+
+    The world here is truncation and NOTHING else: every result in scope,
+    valid, unfiltered, active vault confirmed (conftest), so no other check
+    can carry the flag for the mutation to hide behind."""
+    many = [{"file": "docs/source.md", "count": "1"}] * 3
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
+    result = contracts.query_backlinks("t1", "target.md", max_results=1,
+                                       registry=vault)
+    codes = [c["code"] for c in result["review_checks"]]
+    assert codes == ["TRUNCATED"], (
+        f"this world must produce ONLY the truncation check, or the assertion "
+        f"below proves nothing about the `or truncated` term: {codes}"
+    )
+    assert result["review_required"] is True, (
+        "a truncated result went out with review_required=false -- the caller "
+        "would treat a partial answer as complete"
+    )
+
+
+def test_review_required_agrees_with_the_emitted_checks(vault, monkeypatch):
+    """The general invariant behind F4: the flag must be computed from (or at
+    least consistent with) the checks the RESULT actually carries, not from an
+    intermediate list captured before appends. If someone adds another
+    post-flag append, this catches it without knowing its name."""
+    many = [{"file": "docs/source.md", "count": "1"}] * 3
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
+    result = contracts.query_backlinks("t1", "target.md", max_results=1,
+                                       registry=vault)
+    assert result["review_checks"], "world broken: expected at least TRUNCATED"
+    assert result["review_required"] is True, (
+        "result carries review_checks but review_required is false -- the two "
+        "fields disagree, so one of them is lying to the caller"
+    )
+
+
 def test_max_results_zero_is_rejected(vault):
     """Regression (finding #3): max_results was never validated, so 0 or a
     negative value fell through to Python slice semantics instead of being
