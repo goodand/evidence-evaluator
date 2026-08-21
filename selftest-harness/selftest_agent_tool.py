@@ -58,6 +58,12 @@ REQUIRED_ACTIONS = {
         "global (importlib.reload and module-level env reads are the usual "
         "causes; monkeypatch cannot undo a reload) and make the test build the "
         "world it needs.",
+    "ORDER_DEPENDENT_ITEMWISE":
+        "A test's outcome changes when tests are shuffled WITHIN their file, "
+        "which the file-level checker cannot see. Read `outcomes_by_order` to "
+        "find which ordering exposes it, reproduce with that exact "
+        "--randomly-seed, and make the affected test build its own state "
+        "instead of inheriting a sibling's.",
     "ENV_SENSITIVE":
         "The suite's outcome changes with an environment variable the package "
         "reads at import time. Either the tests depend on ambient "
@@ -86,8 +92,8 @@ class Check:
     evidence: dict = field(default_factory=dict)
 
 
-def _pytest(repo: Path, targets: list[str], env: dict[str, str] | None = None
-            ) -> tuple[dict[str, str], str]:
+def _pytest(repo: Path, targets: list[str], env: dict[str, str] | None = None,
+            python: str | None = None) -> tuple[dict[str, str], str]:
     """Run pytest and map node id -> outcome. --color=no is load-bearing:
     with colour on, outcomes are wrapped in ANSI escapes and the regex below
     matches nothing, which would report success for the wrong reason."""
@@ -99,7 +105,7 @@ def _pytest(repo: Path, targets: list[str], env: dict[str, str] | None = None
             else:
                 environ[key] = value
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", *targets, "-v", "--tb=no",
+        [python or sys.executable, "-m", "pytest", *targets, "-v", "--tb=no",
          "--color=no", "-p", "no:cacheprovider"],
         cwd=repo, capture_output=True, text=True, env=environ,
     )
@@ -223,6 +229,93 @@ def check_env_sensitivity(repo: Path, env_matrix: list[dict]) -> Check:
                  f"stable across {len(env_matrix)} configuration(s)")
 
 
+PINNED_SEEDS = (2, 3, 4, 5, 8)
+"""Fixed orderings, not a lottery.
+
+`pytest-randomly` picks a fresh seed per run by default, which makes it a
+discovery tool and a poor regression gate. Measured on this project's two known
+order dependences: each was surfaced by roughly 6 in 10 seeds, so a single
+random-seed run misses ~40% of the time -- worse than the deterministic
+file-level checker it would replace.
+
+These five are the intersection of the seeds that surfaced BOTH known defects,
+and a given seed reproduces (seed 2 checked 3 times, 3 hits). Pinning them makes
+the gate deterministic while keeping five distinct orderings.
+
+  cross-file (vault-backlinks-mcp 95aefdb, hostile env): 23/40 seeds
+  same-file (green-by-default two-test fixture):         25/40 seeds
+
+These seeds are known to catch THESE defects. They are not a guarantee for
+future ones -- when a random-seed run finds something these five miss, add its
+seed here rather than replacing them.
+"""
+
+
+def check_order_independence_itemwise(repo: Path, env_matrix: list[dict],
+                                      python: str) -> Check:
+    """Shuffle tests WITHIN files, which the file-level checker cannot do.
+
+    The delegated `scripts/order_independence_check.py` compares whole-suite
+    against file-alone, so two tests leaking into each other inside one file
+    stay together in both runs and are invisible to it. Measured: on a
+    green-by-default same-file fixture that checker reports OK, while
+    `pytest-randomly` surfaced it on 25 of 40 seeds.
+
+    A test whose outcome differs between any two orderings is order-dependent;
+    no "correct" baseline is needed, only disagreement.
+    """
+    # A probe that cannot even be launched (missing interpreter, not
+    # executable) must degrade to did_not_run like any other unavailable
+    # check. Letting OSError escape here crashed the whole tool and produced
+    # no JSON at all -- found by `test_itemwise_reports_a_missing_plugin_as_a_skip`.
+    try:
+        probe = subprocess.run([python, "-c", "import pytest_randomly"],
+                               capture_output=True, text=True)
+    except OSError as exc:
+        return Check("ORDER_DEPENDENT_ITEMWISE", "did_not_run",
+                     f"could not run {python}: {exc!r}; within-file ordering "
+                     "was NOT examined")
+    if probe.returncode != 0:
+        return Check("ORDER_DEPENDENT_ITEMWISE", "did_not_run",
+                     f"pytest-randomly is not importable by {python}; "
+                     "within-file ordering was NOT examined. Install it, or pass "
+                     "--python pointing at an interpreter that has it.")
+    disagreements = []
+    for config in [None, *env_matrix]:
+        seen: dict[str, dict[str, str]] = {}
+        # Definition order first, then each pinned shuffle.
+        orders: list[list[str]] = [["-p", "no:randomly"]]
+        orders += [[f"--randomly-seed={seed}"] for seed in PINNED_SEEDS]
+        for extra in orders:
+            outcomes, _ = _pytest(repo, ["tests/", *extra], env=config,
+                                  python=python)
+            if not outcomes:
+                return Check("ORDER_DEPENDENT_ITEMWISE", "did_not_run",
+                             f"outcomes unparseable for {extra} under "
+                             f"{config or 'default'}")
+            label = " ".join(extra)
+            for node, outcome in outcomes.items():
+                previous = seen.setdefault(node, {})
+                previous[label] = outcome
+        for node, by_order in seen.items():
+            if len(set(by_order.values())) > 1:
+                disagreements.append({"test": node,
+                                      "env": config or "default",
+                                      "outcomes_by_order": by_order})
+    if disagreements:
+        return Check("ORDER_DEPENDENT_ITEMWISE", "fired",
+                     f"{len(disagreements)} test(s) changed outcome across "
+                     f"pinned orderings",
+                     {"seeds": list(PINNED_SEEDS),
+                      "disagreements": disagreements[:10]})
+    return Check("ORDER_DEPENDENT_ITEMWISE", "passed",
+                 f"stable across definition order plus {len(PINNED_SEEDS)} "
+                 f"pinned shuffles",
+                 {"seeds": list(PINNED_SEEDS),
+                  "note": "these seeds caught this project's two known "
+                          "dependences; they are not a proof for unknown ones"})
+
+
 def check_worktree_clean(repo: Path) -> Check:
     proc = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
                           capture_output=True, text=True)
@@ -271,11 +364,13 @@ def check_guard_witnesses(repo: Path, source: str | None,
 
 
 def evaluate(repo: Path, env_matrix: list[dict], guard_source: str | None,
-             guard_registry: str | None) -> dict:
+             guard_registry: str | None, python: str | None = None) -> dict:
     checks = [
         check_worktree_clean(repo),
         check_suite_green(repo),
         check_order_independence(repo, env_matrix),
+        check_order_independence_itemwise(repo, env_matrix,
+                                          python or sys.executable),
         check_env_sensitivity(repo, env_matrix),
         check_guard_witnesses(repo, guard_source, guard_registry),
     ]
@@ -311,6 +406,11 @@ def main() -> int:
                              "are the guards")
     parser.add_argument("--guard-registry", default=None,
                         help="repo-relative file expected to name every guard code")
+    parser.add_argument("--python", default=None,
+                        help="interpreter used to run the target's suite. Point "
+                             "this at a virtualenv that has pytest-randomly, or "
+                             "the within-file ordering check reports "
+                             "CHECK_DID_NOT_RUN. Defaults to this interpreter.")
     args = parser.parse_args()
 
     repo = Path(args.repo).expanduser().resolve()
@@ -323,7 +423,8 @@ def main() -> int:
         key, _, value = item.partition("=")
         env_matrix.append({key: (value if value else None)})
 
-    result = evaluate(repo, env_matrix, args.guard_source, args.guard_registry)
+    result = evaluate(repo, env_matrix, args.guard_source, args.guard_registry,
+                      args.python)
     print(json.dumps(result, indent=2))
     return 0 if result["status"] == "complete" else 1
 

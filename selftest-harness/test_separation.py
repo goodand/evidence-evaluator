@@ -25,6 +25,7 @@ says so rather than implying detection was proven twice.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -94,11 +95,40 @@ CLEAN_FILES = {
 }
 
 
+ITEMWISE_PYTHON = os.environ.get("SELFTEST_ITEMWISE_PYTHON")
+"""An interpreter that can import pytest_randomly.
+
+The within-file ordering check needs one, and this repository deliberately does
+NOT take pytest-randomly as a hard dependency -- absence must degrade to
+CHECK_DID_NOT_RUN, which is itself one of the cases below. So the firing case
+needs an interpreter supplied from outside:
+
+    python3 -m venv /tmp/itemwise && /tmp/itemwise/bin/pip install pytest pytest-randomly
+    SELFTEST_ITEMWISE_PYTHON=/tmp/itemwise/bin/python python3 -m pytest selftest-harness/
+
+When it is unset, `test_itemwise_fires_on_same_file_pollution` FAILS rather than
+skipping. A skipped witness and a passing witness must not look alike -- that is
+the whole subject of this file.
+"""
+
+
 def test_a_clean_repository_comes_back_complete(tmp_path):
     """Without this, a harness that fired on everything would satisfy every
-    other test in this file."""
+    other test in this file.
+
+    `--python` is supplied so the within-file ordering check can actually run;
+    otherwise this fixture is legitimately `review_required` for a missing
+    plugin, which is a different case (see
+    `test_itemwise_reports_a_missing_plugin_as_a_skip`).
+    """
+    if not ITEMWISE_PYTHON:
+        pytest.fail(
+            "SELFTEST_ITEMWISE_PYTHON is unset, so the clean case cannot be "
+            "distinguished from a case where a check merely could not run. "
+            "See the ITEMWISE_PYTHON docstring for the one-line setup."
+        )
     repo = _repo(tmp_path, extra=CLEAN_FILES)
-    result = run_harness(repo, *CLEAN_ARGS)
+    result = run_harness(repo, *CLEAN_ARGS, "--python", ITEMWISE_PYTHON)
     assert result["status"] == "complete", (
         f"a clean repository produced review codes {codes(result)}: "
         f"{result['review_checks']}"
@@ -106,6 +136,75 @@ def test_a_clean_repository_comes_back_complete(tmp_path):
     assert not result["checks_skipped"], (
         f"nothing should have been skipped here: {result['checks_skipped']}"
     )
+
+
+def test_itemwise_fires_on_same_file_pollution(tmp_path):
+    """The case the file-level checker structurally cannot cover.
+
+    Two tests in ONE file, victim defined first so the suite is GREEN in
+    definition order and nobody notices. Measured: the delegated file-level
+    checker reports OK on exactly this shape, while pytest-randomly surfaced it
+    on 25 of 40 random seeds. The pinned seeds were chosen from that hit set, so
+    them firing here is by construction, not evidence about unseen defects.
+    """
+    if not ITEMWISE_PYTHON:
+        pytest.fail(
+            "SELFTEST_ITEMWISE_PYTHON is unset, so ORDER_DEPENDENT_ITEMWISE has "
+            "no positive witness in this run. Refusing to report a pass for a "
+            "code nobody has seen fire."
+        )
+    files = dict(CLEAN_FILES)
+    files["tests/test_basic.py"] = (
+        "_STATE = {'dirty': False}\n\n"
+        "def test_a_needs_a_clean_state():\n"
+        "    assert not _STATE['dirty']\n\n"
+        "def test_b_pollutes():\n"
+        "    _STATE['dirty'] = True\n")
+    repo = _repo(tmp_path, extra=files)
+
+    baseline = subprocess.run(
+        [ITEMWISE_PYTHON, "-m", "pytest", "tests/", "-q", "--color=no",
+         "-p", "no:randomly"], cwd=repo, capture_output=True, text=True)
+    # Asserting "no failures" rather than a test count: the first version
+    # asserted "2 passed" and the fixture actually has three tests, because
+    # CLEAN_FILES contributes one of its own. A count is a second fact to keep
+    # in sync; the property that matters is only that nothing fails.
+    assert "failed" not in baseline.stdout, (
+        "the fixture is supposed to be GREEN in definition order, otherwise it "
+        f"is just a failing suite: {baseline.stdout[-400:]}"
+    )
+
+    result = run_harness(repo, "--guard-source", "src/guards.py",
+                         "--guard-registry", "tests/test_witness.py",
+                         "--python", ITEMWISE_PYTHON)
+    assert "ORDER_DEPENDENT_ITEMWISE" in codes(result), (
+        f"within-file pollution went unreported: {result['review_checks']}"
+    )
+    evidence = next(c for c in result["review_checks"]
+                    if c["code"] == "ORDER_DEPENDENT_ITEMWISE")["evidence"]
+    by_order = evidence["disagreements"][0]["outcomes_by_order"]
+    assert by_order["-p no:randomly"] == "PASSED", (
+        "the report must show that definition order passes -- that is what "
+        "makes this defect invisible without shuffling"
+    )
+    assert "FAILED" in by_order.values()
+
+
+def test_itemwise_reports_a_missing_plugin_as_a_skip(tmp_path):
+    """Absence of pytest-randomly must degrade to CHECK_DID_NOT_RUN, never to a
+    quiet pass. This is what keeps the plugin an optional dependency without the
+    optionality turning into a blind spot."""
+    repo = _repo(tmp_path, extra=CLEAN_FILES)
+    # A path that is not an interpreter at all. Deterministic and
+    # environment-independent: it works whether or not this machine happens to
+    # have pytest-randomly installed anywhere.
+    result = run_harness(repo, "--guard-source", "src/guards.py",
+                         "--guard-registry", "tests/test_witness.py",
+                         "--python", str(tmp_path / "no-such-interpreter"))
+    assert "ORDER_DEPENDENT_ITEMWISE" in skipped(result), (
+        f"a missing plugin was not reported as a skip: {result['review_checks']}"
+    )
+    assert "ORDER_DEPENDENT_ITEMWISE" not in result["checks_run"]
 
 
 # --- one positive witness per code ----------------------------------------
