@@ -96,14 +96,21 @@ MAX_RESULTS_UPPER_BOUND = 1000
 
 
 def _error_result(vault_id: str, path: str, message: str, *,
+                  error_code: str,
                   review_checks: list[dict] | None = None) -> dict:
+    """A refusal. `error_code` is REQUIRED and must be a literal at the call
+    site: the witness registry (tests/test_error_code_witness.py) parses those
+    literals out of this file with AST, so a refusal added without a code --
+    or with a computed one -- fails the completeness meta-guard instead of
+    silently joining the untracked prose channel (F7, 2026-08-22). Callers
+    branch on the code; the `error` message stays for humans."""
     return {
         "contract_version": CONTRACT_VERSION, "vault_id": vault_id, "path": path,
         "backend_used": "none", "backlinks": None, "total": 0, "returned_count": 0,
         "dropped_out_of_scope": 0,
         "dropped_by_reason": {"malformed": 0, "forbidden": 0, "out_of_scope": 0},
         "review_required": bool(review_checks), "review_checks": review_checks or [],
-        "error": message,
+        "error": message, "error_code": error_code,
     }
 
 
@@ -125,17 +132,19 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
         return _error_result(
             vault_id, path,
             f"max_results must be an integer in [1, {MAX_RESULTS_UPPER_BOUND}], "
-            f"got {max_results!r}")
+            f"got {max_results!r}", error_code="INVALID_MAX_RESULTS")
     try:
         clean_path = validate_relative_path(path)
     except PathSecurityError as exc:
-        return _error_result(vault_id, path, str(exc))
+        return _error_result(vault_id, path, str(exc),
+                             error_code="INVALID_PATH")
 
     if is_forbidden(clean_path):
         return _error_result(vault_id, clean_path,
                              f"path matches a forbidden segment "
                              f"({', '.join(DEFAULT_FORBIDDEN_SEGMENTS)} are never queried "
-                             f"or returned by this tool)")
+                             f"or returned by this tool)",
+                             error_code="PATH_FORBIDDEN")
 
     # `load_registry()` itself can raise RegistryError (malformed registry
     # file), not just `resolve_vault()` (unknown vault_id in an otherwise
@@ -149,7 +158,8 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
         reg = registry if registry is not None else load_registry()
         vault = resolve_vault(vault_id, reg)
     except RegistryError as exc:
-        return _error_result(vault_id, clean_path, str(exc))
+        return _error_result(vault_id, clean_path, str(exc),
+                             error_code="REGISTRY_ERROR")
 
     # Re-check against the RESOLVED path now that we have a vault. The
     # literal check above cannot see through a symlink alias
@@ -161,14 +171,16 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
         return _error_result(vault_id, clean_path,
                              f"path resolves inside a forbidden segment "
                              f"({', '.join(DEFAULT_FORBIDDEN_SEGMENTS)} are never queried "
-                             f"or returned by this tool)")
+                             f"or returned by this tool)",
+                             error_code="PATH_FORBIDDEN_RESOLVED")
 
     if not exists_under_root(vault, clean_path):
         return _error_result(
             vault_id, clean_path,
             f"{clean_path!r} does not exist under the registered root for "
             f"vault_id {vault_id!r} -- refusing to query a path this server "
-            f"cannot confirm belongs to that vault")
+            f"cannot confirm belongs to that vault",
+            error_code="PATH_NOT_IN_VAULT")
 
     review_checks = []
     # FUNDAMENTAL LIMITATION (independent review round 2, finding #3, not
@@ -269,8 +281,10 @@ def query_backlinks(vault_id: str, path: str, *, max_results: int = DEFAULT_MAX_
                     vault_id, clean_path,
                     f"live backend unavailable: {exc}; filesystem fallback also "
                     f"failed: {fallback_error!r}",
+                    error_code="BACKEND_UNAVAILABLE",
                     review_checks=review_checks or None)
             return _error_result(vault_id, clean_path, f"live backend unavailable: {exc}",
+                                 error_code="BACKEND_UNAVAILABLE",
                                  review_checks=review_checks or None)
         raw = [{"file": item} for item in fallback_paths]
         backend_used = "filesystem_fallback"
