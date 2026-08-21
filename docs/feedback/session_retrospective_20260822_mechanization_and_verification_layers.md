@@ -183,7 +183,20 @@ I183. 산문 경고(HANDOFF §6(d)) 후에도 재발했으므로 산문으로는
 | I193 | ✅ `3d50800` | TDD red 10 → green 108; poison 2종 |
 | I194 | ⚠️ 미해결 | 격리 세션에서는 불가; 따라잡기 명령 기록됨 |
 
-미해결 잔여: F5(payload 미검증 — `EXECUTED_NOT_CHECKED`의 대표), backlinks
+**F5 정정 (2026-08-22, 이 문서 작성 후 측정).** 위 표에 F5를 "미해결 잔여"로
+적었는데, 재검증이 서술을 두 번 좁혔다. (a) AST 전수 확인 결과 11개 가드는
+전부 `{code, required_action}` 두 키뿐이므로 checks 내부에는 수치 payload가
+없다 — `_codes()`가 버리는 것은 산문 하나다. (b) 최상위 수치에는 값을
+고정하는 강한 오라클이 이미 있다(poison 확인: `total`을 pre-v2 버그로
+되돌리면 `test_max_results_truncation_is_flagged`가, `dropped_by_reason`를
+0으로 만들면 `test_drop_reasons_...`가 실패). 따라서 **F5의 `suite_gap: true`는
+과장**이었다. 남은 진짜 간극은 일반화 — 그 오라클들은 두 테스트가 만든
+세계에서만 값을 고정한다. `aa01db2`에서 가드별 사양 대신 22개 목격자 세계에
+결과 불변식 한 벌을 걸어 닫았고, 기존 108개 테스트가 못 잡는 변조(0인 drop
+항목 정리)를 새 축만 잡는 것으로 값을 증명했다. 이 정정 자체가 P3의 또 한
+사례다 — 이번에는 **내 회고의 서술**을 재현이 정정했다.
+
+미해결 잔여: backlinks
 도구의 코드화, C4 recall, mutation survivor 잔여, I183 기계화, I194 동기화.
 
 ## (5) 해결 근거가 있고 반복된 이슈의 문제 정의
