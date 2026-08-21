@@ -19,25 +19,30 @@ poison test로 검증했다. 하네스는 첫 실행에서 실제 미수리 결�
 
 ```bash
 cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
-python3 -m pytest tests/ selftest-harness/ -q     # 기대: 152 passed
-cd /Users/jaehyuntak/Desktop/Project_in_progress/vault-backlinks-mcp
-python3 -m pytest tests/ -q                        # 기대: 89 passed
+python3 -m pytest tests/ selftest-harness/ -q     # 기대: 155 passed, 환경변수 불요
+cd vault-backlinks-mcp                             # subtree가 정본 (§3)
+python3 -m pytest tests/ -q                        # 기대: 92 passed
 python3 scripts/order_independence_check.py        # 기대: exit 0, OK
 ```
 
-하네스 자체를 대상에 돌리는 명령:
+하네스 자체를 대상에 돌리는 명령 (worktree 루트에서):
 
 ```bash
-cd /Users/jaehyuntak/Desktop/Project_in_progress/evidence-evaluator/.claude/worktrees/mcp-v01-backlinks
-python3 selftest-harness/selftest_agent_tool.py \
-    /Users/jaehyuntak/Desktop/Project_in_progress/vault-backlinks-mcp \
+python3 selftest-harness/selftest_agent_tool.py vault-backlinks-mcp \
     --env VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0 \
     --guard-source vault_backlinks_mcp/contracts.py \
     --guard-registry tests/test_guard_witness.py
-# 기대: exit 1, status=review_required, ENV_SENSITIVE 1건 (§5의 미수리 결함)
+# 기대: exit 0, status=complete, 검사 6종 전부 checks_run, skip 0
 ```
 
-`ENV_SENSITIVE`가 나오는 것이 **정상이다.** 알려진 미수리 결함이며 회귀가 아니다.
+`--python` 플래그는 필요 없다 — `~/.claude/venvs/itemwise`의 내구 venv를
+자동 발견한다(없으면 그 검사만 `CHECK_DID_NOT_RUN`으로 내려간다. 재생성:
+`python3 -m venv ~/.claude/venvs/itemwise && ~/.claude/venvs/itemwise/bin/pip
+install pytest pytest-randomly`).
+
+`complete`는 2026-08-22에 순서 의존 4건(§5)을 고치고 나서의 기대값이다.
+그 전 커밋에서는 `ENV_SENSITIVE`와 `ORDER_DEPENDENT_ITEMWISE`가 나오는 것이
+정상이었다 — 결과를 과거 문서와 대조할 때 시점을 확인하라.
 
 모든 수치는 **host lane**(Obsidian CLI와 subprocess가 허용된 환경, macOS,
 Python 3.13.13, pytest 9.1.1) 기준이며 각 1회 측정이다. 권한이 다른 sandbox에서
@@ -60,22 +65,31 @@ P1은 이 프로젝트의 반복 결함이다. 검사를 추가하지만 그것�
 ```
 repo    evidence-evaluator (worktree .claude/worktrees/mcp-v01-backlinks)
 branch  integrate-vbm
-head    323588a
 clean   yes
 
 repo    vault-backlinks-mcp   ← 독립 저장소이며 위 저장소의 subtree로도 존재
 branch  main
-head    9be5171
-clean   yes
+head    fe0b706
 remote  없음. 로컬 커밋만 있다
 ```
 
 **아무것도 push하지 않았다.** push는 매번 별도 승인이 필요하다. 로컬 커밋은 상시
 허용이다.
 
-`vault-backlinks-mcp`가 두 곳에 있다는 점을 주의하라. 독립 저장소이면서
-evidence-evaluator의 subtree다. 이번 세션의 수정은 **독립 저장소에만** 들어갔고
-subtree 쪽은 동기화하지 않았다. `git subtree pull`이 필요하다.
+**이중 존재의 현재 상태 (2026-08-22 갱신).** subtree를 `fe0b706`까지 동기화한 뒤
+(`git subtree pull`, merge 커밋), 순서 의존 4건 수리(`0e45caf`)는 **subtree에만**
+들어갔다. worktree 격리가 독립 저장소로의 쓰기(`git -C`, Edit 모두)를 차단해서
+같은 세션에서 양쪽을 갱신할 수 없었다. 사용자 지시("vault-backlinks-mcp도
+evidence-evaluator repo에서 다룬다")에 따라 **subtree가 정본이다.**
+
+독립 저장소는 정확히 한 커밋 뒤에 있다. 격리 없는 세션에서 이렇게 따라잡는다:
+
+```bash
+git -C /Users/jaehyuntak/Desktop/Project_in_progress/vault-backlinks-mcp \
+    am -p2 <(git -C <이 worktree> format-patch -1 0e45caf --stdout -- vault-backlinks-mcp)
+# 또는 이미 만들어 둔 패치 파일이 남아 있다면 그것을 am -p2로.
+# 적용 후 두 트리는 diff -r로 바이트 일치해야 한다.
+```
 
 ## 4. 만든 것
 
@@ -121,13 +135,14 @@ Validation 절이 이미 코드별 발동/침묵 목격자를 쓰고 있었다. 
    `code` 필드만 뽑아서 `required_action`, `dropped_by_reason`,
    `returned_count`가 전부 미검증이다. 가드 하나가 아니라 **단정 축 하나가
    빠진 것**이다.
-4. **환경 의존 2건** — `test_contracts.py`의 두 테스트가
-   `VAULT_BACKLINKS_FILESYSTEM_FALLBACK=0`에서 PASSED→FAILED로 바뀐다.
-   하네스가 자동으로 찾는다.
-5. **`test_contracts.py:223-224`의 reload 누출** — `monkeypatch.delenv` 후
-   `importlib.reload(contracts)`를 하는데 monkeypatch는 reload를 되돌릴 수
-   없다. 그 시점부터 세션 내내 모듈이 재구성된 상태로 남는다. F2의 가림이
-   이것 때문이었다.
+4. ~~환경 의존 2건~~ — **수리 완료 (2026-08-22, `0e45caf`, subtree).** 두
+   테스트가 필요한 세계(fallback 켜짐)를 직접 만들도록 고쳤다. 발견 경로가
+   중요하다: `ORDER_DEPENDENT_ITEMWISE`의 첫 실전 실행이 이 두 테스트가
+   고정 seed 2–4에서 FAILED, seed 5·8에서 PASSED임을 보고했고, seed 5·8에서
+   통과한 이유가 정확히 F2의 가림 기제였다.
+5. ~~reload 누출~~ — **수리 완료 (같은 커밋).** try/finally로 원래 환경값
+   (존재/부재 포함)을 복원하고 한 번 더 reload한다. monkeypatch는 환경은
+   되돌리지만 모듈은 못 되돌린다.
 
 미검증 상태로 남은 지적도 있다. `docs/ADVERSARIAL_REVIEW_...`의 §6 목록 중
 F1·F3은 반박됐고 F7은 UNDETERMINED다. **F7이 사실이면 레지스트리의 커버리지

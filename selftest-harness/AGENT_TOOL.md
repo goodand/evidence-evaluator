@@ -20,6 +20,15 @@ guards; `--guard-registry` is the file expected to name every one of them.
 Omitted options do not silently pass — the corresponding check reports
 `CHECK_DID_NOT_RUN`.
 
+`--python` names the interpreter used for the within-file ordering check, which
+needs `pytest-randomly`. Omitting it is safe: the tool falls back to the durable
+venv at `~/.claude/venvs/itemwise/bin/python` when present, then to its own
+interpreter, and an interpreter without the plugin degrades to
+`CHECK_DID_NOT_RUN`, never to a quiet pass. Recreate the venv with
+`python3 -m venv ~/.claude/venvs/itemwise && ~/.claude/venvs/itemwise/bin/pip
+install pytest pytest-randomly`. (The first version pinned a session job path,
+which is deleted with the session — that is why the durable location exists.)
+
 Exit 0 on `complete`, 1 on `review_required`, 2 on bad invocation.
 
 ## Agent Rule
