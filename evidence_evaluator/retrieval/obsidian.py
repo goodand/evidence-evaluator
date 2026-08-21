@@ -24,6 +24,14 @@ class ObsidianGraphResult:
     backlinks: tuple[str, ...]
     warnings: tuple[str, ...]
     available: bool
+    # (code, path) per failed probe, classified at the source -- see
+    # `_classify_probe_failure`. The warning STRING kept collapsing two
+    # different worlds ("the CLI is down" vs "this path is not in Obsidian's
+    # index") into one message that a zero-context reader misread as a CLI
+    # outage while the CLI was healthy
+    # (docs/INDEPENDENT_TEST_HAIKU_MCP_20260822.md). Typing the reason here
+    # makes that conflation impossible downstream, whatever the wording.
+    failures: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -33,6 +41,38 @@ class ObsidianBacklinksResult:
     backlinks: tuple[str, ...]
     warnings: tuple[str, ...]
     available: bool
+    failures: tuple[tuple[str, str], ...] = ()
+
+
+# Probe-failure classes. CLI_UNAVAILABLE and NOT_INDEXED are DIFFERENT worlds:
+# the first means the CLI process did not answer at all, the second means a
+# healthy CLI answered "that path is not in my index" (Obsidian does not index
+# dot-directories, so e.g. `.vault-harness/...` paths always land here).
+PROBE_NOT_INDEXED = "NOT_INDEXED"
+PROBE_CLI_UNAVAILABLE = "CLI_UNAVAILABLE"
+PROBE_CLI_ERROR = "CLI_ERROR"
+
+_UNAVAILABLE_MARKERS = (
+    "unable to find obsidian",
+    "connection refused",
+    "timed out",
+    "timeout",
+)
+
+
+def _classify_probe_failure(returncode: int, output: str, error: str) -> str:
+    """ORDER MATTERS. A spawn failure is converted by `_run` to returncode 127
+    with the OS error text -- which contains "No such file or directory". A
+    text-first match would classify a dead CLI as NOT_INDEXED, inverting the
+    misreading this classification exists to prevent. So unavailability is
+    decided first, from the returncode and unambiguous markers; only then is
+    "not found" read as the CLI answering about its index."""
+    text = f"{output}\n{error}".casefold()
+    if returncode == 127 or any(marker in text for marker in _UNAVAILABLE_MARKERS):
+        return PROBE_CLI_UNAVAILABLE
+    if "not found" in text:
+        return PROBE_NOT_INDEXED
+    return PROBE_CLI_ERROR
 
 
 def parse_cli_output(output: str) -> Any:
@@ -93,11 +133,13 @@ class ObsidianCliBackend:
     def neighbors(self, path: CanonicalPath) -> ObsidianGraphResult:
         values: dict[str, tuple[str, ...]] = {}
         warnings: list[str] = []
+        failures: list[tuple[str, str]] = []
         successes = 0
         for key, subcommand in (("backlinks", "backlinks"), ("outgoing", "links")):
-            paths, warning = self._probe(path, subcommand, counts=subcommand == "backlinks")
+            paths, warning, code = self._probe(path, subcommand, counts=subcommand == "backlinks")
             if warning is not None:
                 warnings.append(warning)
+                failures.append((code or PROBE_CLI_ERROR, path.relative))
                 values[key] = ()
                 continue
             successes += 1
@@ -107,6 +149,7 @@ class ObsidianCliBackend:
             backlinks=values.get("backlinks", ()),
             warnings=tuple(warnings),
             available=successes > 0,
+            failures=tuple(failures),
         )
 
     def backlinks_only(self, path: CanonicalPath) -> ObsidianBacklinksResult:
@@ -120,17 +163,23 @@ class ObsidianCliBackend:
         consumer does not have to reimplement the CLI invocation or output
         parsing just to avoid the extra call.
         """
-        paths, warning = self._probe(path, "backlinks", counts=True)
+        paths, warning, code = self._probe(path, "backlinks", counts=True)
         return ObsidianBacklinksResult(
             backlinks=paths or (),
             warnings=(warning,) if warning else (),
             available=warning is None,
+            failures=((code or PROBE_CLI_ERROR, path.relative),) if warning else (),
         )
 
     def _probe(
         self, path: CanonicalPath, subcommand: str, *, counts: bool = False
-    ) -> tuple[tuple[str, ...] | None, str | None]:
-        """Run one CLI subcommand; `None` paths means the warning is set."""
+    ) -> tuple[tuple[str, ...] | None, str | None, str | None]:
+        """Run one CLI subcommand.
+
+        Returns (paths, warning, failure_code); `None` paths means the warning
+        and code are set. The code is one of the PROBE_* constants -- the typed
+        reason travels with the human-readable warning so downstream layers
+        never have to re-derive the reason from the message text."""
         command = [self.profile.obsidian_binary, subcommand]
         if self.profile.vault_name:
             command.append(f"vault={self.profile.vault_name}")
@@ -141,11 +190,12 @@ class ObsidianCliBackend:
         output = result.stdout.strip()
         error = result.stderr.strip()
         if result.returncode != 0 or _looks_like_error(output):
+            code = _classify_probe_failure(result.returncode, output, error)
             return None, (
                 f"Obsidian {subcommand} unavailable for {path.relative}: "
                 f"{error or output or 'command failed'}"
-            )
-        return tuple(graph_paths(parse_cli_output(output))), None
+            ), code
+        return tuple(graph_paths(parse_cli_output(output))), None, None
 
     def _call(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         result = self._runner(command, self.profile.root, self.timeout)

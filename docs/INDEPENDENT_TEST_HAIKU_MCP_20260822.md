@@ -44,9 +44,15 @@
 자체는 설계대로 작동하고 있다** — 문구만 두 상황(CLI 다운 vs 경로별 비색인)을
 구별하지 못한다.
 
-개선 후보(미구현): `_compact_warnings`에서 `File … not found`류와 진짜
-CLI-다운류를 분리 집계. 예: `"Obsidian이 색인하지 않는 경로 N건은 filesystem
-그래프 사용"` vs `"Obsidian CLI 응답 불가"`.
+**구현 완료 (같은 날, 문구 수리가 아니라 기제로).** 문자열 분리 집계 대신
+probe 계층이 실패를 타입으로 분류하고(`NOT_INDEXED` / `CLI_UNAVAILABLE` /
+`CLI_ERROR`), service가 코드화된 `review_checks`를 방출하며, compact 문구는
+코드에서 파생된다. 각 코드는 발동/침묵 세계 쌍을 가진다
+(`tests/test_search_review_check_witness.py`) — 이 오독의 세계
+(건강한 CLI + 비색인 경로)가 `CLI_UNAVAILABLE`의 **영구 negative witness**다.
+분류 순서 함정(spawn 실패 텍스트가 "command not found"를 포함)은 poison
+test가 첫 fixture의 공허함까지 잡아내며 고정됐다. 설계·검증 전말은 해당
+커밋 메시지 참조.
 
 ### 2b. 유효 — `vault_read` 잘림이 본문에는 보이지 않는다
 
