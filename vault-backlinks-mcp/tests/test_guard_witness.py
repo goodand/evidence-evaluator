@@ -453,12 +453,36 @@ def _assert_result_invariants(result: dict, where: str) -> None:
         f"{where}: returned_count disagrees with the list it describes -- "
         f"{result['returned_count']} vs {len(result['backlinks'] or [])}"
     )
-    assert result["total"] >= result["returned_count"], (
-        f"{where}: total ({result['total']}) is below returned_count "
-        f"({result['returned_count']}) -- this is the pre-v2 bug shape, where "
-        f"`total` was computed after truncation and a caller could not tell "
-        f"'there is one backlink' from 'you only asked to see one'"
-    )
+    # Pinned as an EQUALITY, split on the truncation signal, not as
+    # `total >= returned_count`. The inequality was the first form and an
+    # adversarial probe (haiku, 2026-08-22) defeated it: 19 of its 20 payload
+    # mutations were caught, and the survivor was
+    # `total_available = len(kept) + sum(drops.values())` -- which makes
+    # `total` count results the security filter REJECTED. A caller then reads
+    # "10 backlinks available" when 5 passed filtering, the same shape as the
+    # pre-v2 bug where `total` was computed after truncation. The loose
+    # inequality accepted it because an inflated total is still >=
+    # returned_count.
+    #
+    # The exact relation is available from outside: when nothing was
+    # truncated, every kept result was returned, so the two must be EQUAL;
+    # when truncation happened, returned_count is the cap and total must be
+    # strictly greater. `truncated` is observable via the TRUNCATED code.
+    codes = {check["code"] for check in result["review_checks"]}
+    if "TRUNCATED" in codes:
+        assert result["total"] > result["returned_count"], (
+            f"{where}: TRUNCATED was reported but total ({result['total']}) is "
+            f"not above returned_count ({result['returned_count']}) -- either "
+            f"the truncation claim is false or total was computed after the cut"
+        )
+    else:
+        assert result["total"] == result["returned_count"], (
+            f"{where}: nothing was truncated, so every result that passed "
+            f"filtering was returned and total ({result['total']}) must equal "
+            f"returned_count ({result['returned_count']}). A total ABOVE it "
+            f"here means the count includes results this call dropped -- the "
+            f"caller would read filtered-out entries as available evidence."
+        )
     by_reason = result["dropped_by_reason"]
     assert set(by_reason) == {"malformed", "forbidden", "out_of_scope"}, (
         f"{where}: dropped_by_reason lost or gained a reason key: "
