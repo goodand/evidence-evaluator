@@ -95,21 +95,39 @@ CLEAN_FILES = {
 }
 
 
-ITEMWISE_PYTHON = os.environ.get("SELFTEST_ITEMWISE_PYTHON")
-"""An interpreter that can import pytest_randomly.
+def _find_itemwise_python() -> str | None:
+    """An interpreter that can import pytest_randomly.
 
-The within-file ordering check needs one, and this repository deliberately does
-NOT take pytest-randomly as a hard dependency -- absence must degrade to
-CHECK_DID_NOT_RUN, which is itself one of the cases below. So the firing case
-needs an interpreter supplied from outside:
+    Resolution order: explicit SELFTEST_ITEMWISE_PYTHON, then the durable venv
+    this workspace keeps at ~/.claude/venvs/itemwise, then this interpreter
+    itself. The durable venv exists because the first version pinned a path
+    under a session's job directory, which is deleted with the job -- the
+    witness would have silently started failing on the next session. Recreate
+    it with:
 
-    python3 -m venv /tmp/itemwise && /tmp/itemwise/bin/pip install pytest pytest-randomly
-    SELFTEST_ITEMWISE_PYTHON=/tmp/itemwise/bin/python python3 -m pytest selftest-harness/
+        python3 -m venv ~/.claude/venvs/itemwise
+        ~/.claude/venvs/itemwise/bin/pip install pytest pytest-randomly
 
-When it is unset, `test_itemwise_fires_on_same_file_pollution` FAILS rather than
-skipping. A skipped witness and a passing witness must not look alike -- that is
-the whole subject of this file.
-"""
+    This repository deliberately does NOT take pytest-randomly as a hard
+    dependency -- in the harness itself absence degrades to CHECK_DID_NOT_RUN.
+    But in THIS file, when no capable interpreter is found, the firing case
+    FAILS rather than skipping: a skipped witness and a passing witness must
+    not look alike, which is the whole subject of this file.
+    """
+    explicit = os.environ.get("SELFTEST_ITEMWISE_PYTHON")
+    if explicit:
+        return explicit
+    durable = Path.home() / ".claude" / "venvs" / "itemwise" / "bin" / "python"
+    if durable.exists():
+        return str(durable)
+    probe = subprocess.run([sys.executable, "-c", "import pytest_randomly"],
+                           capture_output=True, text=True)
+    if probe.returncode == 0:
+        return sys.executable
+    return None
+
+
+ITEMWISE_PYTHON = _find_itemwise_python()
 
 
 def test_a_clean_repository_comes_back_complete(tmp_path):
@@ -123,9 +141,9 @@ def test_a_clean_repository_comes_back_complete(tmp_path):
     """
     if not ITEMWISE_PYTHON:
         pytest.fail(
-            "SELFTEST_ITEMWISE_PYTHON is unset, so the clean case cannot be "
-            "distinguished from a case where a check merely could not run. "
-            "See the ITEMWISE_PYTHON docstring for the one-line setup."
+            "no interpreter with pytest-randomly was found, so the clean case "
+            "cannot be distinguished from a case where a check merely could not "
+            "run. See _find_itemwise_python for the one-line venv setup."
         )
     repo = _repo(tmp_path, extra=CLEAN_FILES)
     result = run_harness(repo, *CLEAN_ARGS, "--python", ITEMWISE_PYTHON)
@@ -149,9 +167,10 @@ def test_itemwise_fires_on_same_file_pollution(tmp_path):
     """
     if not ITEMWISE_PYTHON:
         pytest.fail(
-            "SELFTEST_ITEMWISE_PYTHON is unset, so ORDER_DEPENDENT_ITEMWISE has "
-            "no positive witness in this run. Refusing to report a pass for a "
-            "code nobody has seen fire."
+            "no interpreter with pytest-randomly was found, so "
+            "ORDER_DEPENDENT_ITEMWISE has no positive witness in this run. "
+            "Refusing to report a pass for a code nobody has seen fire. See "
+            "_find_itemwise_python for the one-line venv setup."
         )
     files = dict(CLEAN_FILES)
     files["tests/test_basic.py"] = (

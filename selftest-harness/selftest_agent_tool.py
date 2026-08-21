@@ -432,11 +432,22 @@ def main() -> int:
     parser.add_argument("--guard-registry", default=None,
                         help="repo-relative file expected to name every guard code")
     parser.add_argument("--python", default=None,
-                        help="interpreter used to run the target's suite. Point "
-                             "this at a virtualenv that has pytest-randomly, or "
-                             "the within-file ordering check reports "
-                             "CHECK_DID_NOT_RUN. Defaults to this interpreter.")
+                        help="interpreter used to run the target's suite for "
+                             "the within-file ordering check. When omitted, "
+                             "falls back to ~/.claude/venvs/itemwise/bin/python "
+                             "if it exists, then to this interpreter; if none "
+                             "of those can import pytest_randomly the check "
+                             "reports CHECK_DID_NOT_RUN.")
     args = parser.parse_args()
+
+    if args.python is None:
+        # The durable venv this workspace keeps for pytest-randomly. Falling
+        # back to it makes the tool usable with no flags; a wrong guess is
+        # safe either way, because an interpreter without the plugin degrades
+        # to CHECK_DID_NOT_RUN rather than to a quiet pass.
+        durable = Path.home() / ".claude" / "venvs" / "itemwise" / "bin" / "python"
+        if durable.exists():
+            args.python = str(durable)
 
     repo = Path(args.repo).expanduser().resolve()
     if not repo.is_dir():
