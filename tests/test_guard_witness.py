@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import importlib
 import os
-import re
+import ast
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -63,16 +63,36 @@ CONTRACTS_SOURCE = (PKG / "contracts.py").read_text(encoding="utf-8")
 def _codes_in_source() -> set[str]:
     """Guard codes as they actually appear in the module under test.
 
-    `[A-Z0-9_]+`, not `[A-Z_]+`. The narrower class silently skipped any
-    future code containing a digit, which made the completeness meta-guard
-    vacuous for exactly the guards it was written to catch. Confirmed by
-    poison test (2026-08-17): appending `{"code": "STALE_INDEX_V2"}` to
-    contracts.py with no registered witness left the meta-guard passing;
-    widening the class makes it fail as intended. No current code has a
-    digit -- this protects the guards nobody has written yet, which is the
-    only thing this meta-guard is for.
+    AST, not a regex. This follows the canonical scanner in this workspace --
+    `concept-gate-taxonomy/test_guard_negative_coverage.py`, documented in
+    `concept-gate-codex-mcp-wt/docs/HARNESS_KNOWHOW.md` §B4a -- which parses
+    rather than matching text, and does not import, so a module name collision
+    cannot decide what gets scanned.
+
+    The regex this replaces was `r'"code":\\s*"([A-Z0-9_]+)"'`, and its
+    character class was itself a bug fixed by hand: the earlier `[A-Z_]+`
+    silently skipped any code containing a digit, making the completeness
+    meta-guard vacuous for exactly the guards it exists to catch. Parsing has
+    no character class to remember to widen, so that class of defect cannot
+    recur.
+
+    Measured before the swap (2026-08-22): on `contracts.py` both forms return
+    the same 11 codes, so this is not a behaviour change. On a probe where a
+    code appears inside a docstring and inside a comment, the regex returned
+    three codes and the parse returned one -- the regex was also counting prose
+    as guards, which would have let a fabricated witness satisfy the
+    meta-guard.
     """
-    return set(re.findall(r'"code":\s*"([A-Z0-9_]+)"', CONTRACTS_SOURCE))
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(CONTRACTS_SOURCE)):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if (isinstance(key, ast.Constant) and key.value == "code"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                found.add(value.value)
+    return found
 
 
 @dataclass(frozen=True)
@@ -255,17 +275,52 @@ def _two_vaults(tmp: Path) -> dict:
     return registry
 
 
+# --- documented exemptions ------------------------------------------------
+# Reused verbatim in shape from this workspace's canonical mechanism,
+# `concept-gate-taxonomy/test_guard_negative_coverage.py` (see
+# `concept-gate-codex-mcp-wt/docs/HARNESS_KNOWHOW.md` §B4a). The point is that
+# "known but not yet witnessed" belongs in CODE with a reason and an owner, not
+# in a prose section of a handoff document where nothing checks it. Before this,
+# unresolved items from the 2026-08-17 adversarial review lived only in
+# `docs/ADVERSARIAL_REVIEW_GUARD_WITNESS_20260817.md`, so nothing failed when
+# they went stale.
+#
+# Two rules the canonical version establishes and this one keeps:
+#   1. An exemption that outlives its reason is a silent cap, so the list is
+#      itself checked -- in both directions.
+#   2. Do NOT fabricate a witness to empty this list. A mock-built negative
+#      witness turns the gate green while proving nothing. If a guard cannot be
+#      witnessed because the code already guarantees its condition, the question
+#      is whether the guard is redundant, and that is a design decision a test
+#      must not make on its own.
+
+KNOWN_UNPROVEN: dict[str, str] = {
+    # Empty, and that is the measured state: all 11 codes in contracts.py have
+    # a positive and a negative witness. Kept because the mechanism must exist
+    # BEFORE it is needed -- an empty list with live staleness checks is the
+    # difference between "no exemptions" and "exemptions nobody tracks".
+}
+
+
 # --- the tests ------------------------------------------------------------
 
 def test_every_guard_in_the_source_is_registered():
     """The meta-guard. Without it this file decays silently the moment
     someone adds a guard and forgets to add a witness -- the same "a gate
     hides a gate" failure this project has already hit twice."""
-    missing = _codes_in_source() - set(GUARD_WITNESSES)
+    in_source = _codes_in_source()
+    assert in_source, (
+        "the parse found no guard codes at all in contracts.py -- the scanner "
+        "is broken, not the module. A completeness check over an empty set "
+        "passes trivially, which is the exact failure this file exists to stop."
+    )
+    missing = in_source - set(GUARD_WITNESSES) - set(KNOWN_UNPROVEN)
     assert not missing, (
         f"guard code(s) in contracts.py with no registered witness: "
         f"{sorted(missing)}. Add a positive AND negative witness to "
-        f"GUARD_WITNESSES; a guard nobody can show firing is not a guard."
+        f"GUARD_WITNESSES; a guard nobody can show firing is not a guard. "
+        f"If it genuinely cannot be witnessed yet, add it to KNOWN_UNPROVEN "
+        f"with a reason -- but do not fabricate a mock-based witness."
     )
 
 
@@ -277,6 +332,49 @@ def test_the_registry_does_not_claim_guards_that_no_longer_exist():
         f"registered witness(es) for code(s) absent from contracts.py: "
         f"{sorted(stale)}"
     )
+
+
+def test_known_unproven_entries_are_not_stale():
+    """An exemption list that outlives its reason is a silent cap.
+
+    Checked in both directions, matching the canonical mechanism:
+    an entry naming a code that no longer exists exempts nothing while looking
+    like it exempts something -- and a future guard reusing that name would
+    silently inherit the exemption. An entry that has since acquired a witness
+    is simply obsolete.
+    """
+    in_source = _codes_in_source()
+    vanished = sorted(code for code in KNOWN_UNPROVEN if code not in in_source)
+    assert not vanished, (
+        f"KNOWN_UNPROVEN names guard code(s) absent from contracts.py -- delete "
+        f"these entries, and note that leaving them lets a future guard reusing "
+        f"the name inherit the exemption: {vanished}"
+    )
+    now_witnessed = sorted(code for code in KNOWN_UNPROVEN
+                           if code in GUARD_WITNESSES)
+    assert not now_witnessed, (
+        f"these code(s) now have a registered witness, so the exemption is "
+        f"obsolete -- delete them from KNOWN_UNPROVEN: {now_witnessed}"
+    )
+
+
+@pytest.mark.parametrize("bogus,expected", [
+    ("A_CODE_THAT_WAS_NEVER_IN_CONTRACTS", "absent from contracts.py"),
+    # A real, already-witnessed code: the exemption is obsolete by definition.
+    ("TRUNCATED", "obsolete"),
+])
+def test_the_staleness_check_itself_fires_on_a_bogus_entry(monkeypatch, bogus,
+                                                           expected):
+    """The exemption list is a checker, so it gets its own negative witness.
+
+    Without this, `test_known_unproven_entries_are_not_stale` passing would be
+    indistinguishable from it being unable to fail -- which is precisely the
+    vacuous-guard shape this whole file is about. Both failure directions are
+    exercised, because a check that catches only one of them is half a check.
+    """
+    monkeypatch.setitem(KNOWN_UNPROVEN, bogus, "injected by a negative witness")
+    with pytest.raises(AssertionError, match=expected):
+        test_known_unproven_entries_are_not_stale()
 
 
 def test_the_fallback_witness_does_not_depend_on_import_time_configuration(
