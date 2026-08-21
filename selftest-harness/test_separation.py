@@ -248,6 +248,37 @@ def test_a_guard_code_containing_a_digit_is_not_invisible(tmp_path):
     )
 
 
+def test_a_code_that_only_appears_in_prose_is_not_counted_as_a_guard(tmp_path):
+    """Precision of the AST swap, which the regex did not have.
+
+    The replaced regex matched `"code": "X"` anywhere in the file, including
+    inside docstrings and comments. Measured on a probe: regex found three
+    codes, the parse found one. That mattered in the direction nobody checks --
+    a registry could satisfy the completeness check by naming a code that only
+    ever appeared in a comment, so the check would report coverage of a guard
+    that does not exist.
+
+    Here the registry names ONLY the real guard. Under the old regex the two
+    prose codes would have been reported as missing witnesses; under the parse
+    they are not guards at all and the check is quiet.
+    """
+    files = dict(CLEAN_FILES)
+    files["src/guards.py"] = (
+        '"""Module docstring mentioning {"code": "DOCUMENTED_BUT_NOT_REAL"}."""\n'
+        '# A commented-out guard: {"code": "COMMENTED_OUT"}\n'
+        '_GUARDS = [{"code": "THE_ONLY_REAL_ONE"}]\n')
+    files["tests/test_witness.py"] = (
+        "# witness for THE_ONLY_REAL_ONE\n"
+        "def test_w():\n    assert True\n")
+    repo = _repo(tmp_path, extra=files)
+    result = run_harness(repo, "--guard-source", "src/guards.py",
+                         "--guard-registry", "tests/test_witness.py")
+    assert "GUARD_WITHOUT_WITNESS" not in codes(result), (
+        "a code appearing only in a docstring or comment was treated as a "
+        f"guard: {result['review_checks']}"
+    )
+
+
 def test_env_sensitive_fires_when_import_time_configuration_changes_outcomes(tmp_path):
     files = dict(CLEAN_FILES)
     files["tests/test_basic.py"] = (

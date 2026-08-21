@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ast
 import re
 import subprocess
 import sys
@@ -333,9 +334,20 @@ def check_guard_witnesses(repo: Path, source: str | None,
                           registry: str | None) -> Check:
     """Compare guard codes in the source against codes named in the registry.
 
-    `[A-Z0-9_]+`, not `[A-Z_]+`. The narrower class silently skipped any code
-    containing a digit -- the completeness check going vacuous for exactly the
-    guards it exists to catch (vault-backlinks-mcp 95aefdb).
+    Parsed, not matched. Following this workspace's canonical scanner
+    (`concept-gate-taxonomy/test_guard_negative_coverage.py`, documented in
+    `concept-gate-codex-mcp-wt/docs/HARNESS_KNOWHOW.md` §B4a), which uses AST
+    for two reasons that both apply here: it does not import the file it
+    audits, and it has no character class that someone has to remember to
+    widen.
+
+    The regex this replaces was `r'"code":\\s*"([A-Z0-9_]+)"'`, whose class was
+    itself a hand-fixed bug -- the original `[A-Z_]+` skipped every code
+    containing a digit. Measured 2026-08-22: both forms return the same 11
+    codes on the real target, but on a probe where a code appears in a
+    docstring and in a comment the regex returned three and the parse returned
+    one. The regex counted prose as guards, so a witness naming a code that
+    only ever appeared in a comment would have satisfied the check.
     """
     if not source or not registry:
         return Check("GUARD_WITHOUT_WITNESS", "did_not_run",
@@ -346,8 +358,21 @@ def check_guard_witnesses(repo: Path, source: str | None,
         if not path.exists():
             return Check("GUARD_WITHOUT_WITNESS", "did_not_run",
                          f"{path} does not exist")
-    pattern = re.compile(r'"code":\s*"([A-Z0-9_]+)"')
-    in_source = set(pattern.findall(source_path.read_text(encoding="utf-8")))
+    try:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        return Check("GUARD_WITHOUT_WITNESS", "did_not_run",
+                     f"{source} could not be parsed: {exc}; witness "
+                     "completeness was NOT examined")
+    in_source: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if (isinstance(key, ast.Constant) and key.value == "code"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                in_source.add(value.value)
     registry_text = registry_path.read_text(encoding="utf-8")
     missing = sorted(code for code in in_source
                      if not re.search(rf'\b{re.escape(code)}\b', registry_text))
