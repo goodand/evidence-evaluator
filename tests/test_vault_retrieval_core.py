@@ -19,7 +19,13 @@ from evidence_evaluator.retrieval.obsidian import (
     parse_cli_output,
 )
 from evidence_evaluator.retrieval.profile import VaultProfile
-from evidence_evaluator.retrieval.retriever import RetrievalConfig, RetrievalError
+from evidence_evaluator.retrieval.retriever import (
+    MAX_CANDIDATE_POOL_K,
+    MAX_GRAPH_SEED_K,
+    MAX_TURNS,
+    RetrievalConfig,
+    RetrievalError,
+)
 from evidence_evaluator.retrieval.service import RetrievalService, ServiceError
 
 
@@ -260,6 +266,76 @@ def test_candidate_pool_and_output_are_independent(profile: VaultProfile) -> Non
     assert len(result["candidate_pool"]) >= 3
     with pytest.raises(RetrievalError):
         RetrievalConfig(output_k=9, candidate_pool_k=8)
+
+
+# --- RetrievalConfig validation: one witness per branch --------------------
+#
+# WHY THIS EXISTS. Mutation analysis (2026-08-17) found the `graph_seed_k`
+# branch of `RetrievalConfig.__post_init__` surviving every test, and a poison
+# test confirmed it: replacing that branch with `if False:` left the whole
+# suite at 131 passed. The only `pytest.raises(RetrievalError)` in this file
+# was `RetrievalConfig(output_k=9, candidate_pool_k=8)`, which trips the FIRST
+# branch and never reaches the second.
+#
+# That case also shows why one assertion per branch is not enough. Its default
+# `graph_seed_k=12` exceeds `candidate_pool_k=8`, so it violates the second
+# branch too -- the first one just raises first. A test that only checks "some
+# RetrievalError was raised" cannot tell which branch spoke, so a dead branch
+# hides behind a live one. Each case below violates EXACTLY ONE branch, and
+# asserts on the message, so the witness names the branch it proves.
+#
+# The hiding turned out to run BOTH ways. Poison-testing each branch in turn
+# (2026-08-17) showed that killing the FIRST branch also leaves
+# `test_candidate_pool_and_output_are_independent` passing -- its default
+# `graph_seed_k=12` breaks the second bound, so the second branch raises the
+# RetrievalError the assertion was waiting for. That test witnesses "some
+# bound rejected this config", which neither branch needs to be alive for.
+#
+# Poison results, whole suite, one branch disabled at a time:
+#   output_k branch     -> 3 failed (kwargs0-2), old test still passed
+#   graph_seed_k branch -> 3 failed (kwargs3-5)
+#   max_turns branch    -> 2 failed (kwargs6-7)
+# Each branch is witnessed by exactly its own cases and nothing else.
+#
+# The guard was never unreachable -- it fired on a real call during this
+# session's own work. It was reachable and unwitnessed, which is the harder
+# case to notice.
+
+_ONE_BRANCH_EACH = [
+    # (kwargs, fragment of the message that branch alone produces)
+    ({"output_k": 0}, "output_k"),
+    ({"output_k": 9, "candidate_pool_k": 8, "graph_seed_k": 1}, "output_k"),
+    ({"candidate_pool_k": MAX_CANDIDATE_POOL_K + 1}, "output_k"),
+    ({"graph_seed_k": 0}, "graph_seed_k"),
+    ({"graph_seed_k": 51, "candidate_pool_k": 50}, "graph_seed_k"),
+    ({"graph_seed_k": MAX_GRAPH_SEED_K + 1,
+      "candidate_pool_k": MAX_CANDIDATE_POOL_K}, "graph_seed_k"),
+    ({"max_turns": 0}, "max_turns"),
+    ({"max_turns": MAX_TURNS + 1}, "max_turns"),
+]
+
+
+@pytest.mark.parametrize("kwargs,expected_fragment", _ONE_BRANCH_EACH)
+def test_each_config_bound_rejects_and_says_which_bound(kwargs, expected_fragment):
+    with pytest.raises(RetrievalError) as excinfo:
+        RetrievalConfig(**kwargs)
+    assert expected_fragment in str(excinfo.value), (
+        f"{kwargs} raised, but the message did not mention {expected_fragment!r} "
+        f"-- it said {str(excinfo.value)!r}. A different branch spoke, so this "
+        f"case is not a witness for the branch it was written for."
+    )
+
+
+def test_a_config_inside_every_bound_is_accepted():
+    """The negative witness. Without it, validation that rejects EVERYTHING
+    would satisfy all eight cases above."""
+    config = RetrievalConfig(
+        output_k=8,
+        candidate_pool_k=MAX_CANDIDATE_POOL_K,
+        graph_seed_k=MAX_GRAPH_SEED_K,
+        max_turns=MAX_TURNS,
+    )
+    assert config.graph_seed_k == MAX_GRAPH_SEED_K
 
 
 def test_transport_paths_are_bounded_even_when_graph_discovers_more(

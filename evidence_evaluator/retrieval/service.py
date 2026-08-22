@@ -112,13 +112,78 @@ class RetrievalService:
                 "Read selected canonical paths; treat zero hits or a budget stop as inconclusive."
             ),
         }
+        # Coded review checks from the TYPED probe failures -- same contract
+        # shape as `.vault-harness`'s exception checks and vault-backlinks-mcp's
+        # review_checks, reused rather than invented. The prose warnings used to
+        # be the only carrier, and their aggregation collapsed "these paths are
+        # not in Obsidian's index" into a message reading "the CLI is down"; an
+        # independent zero-context test misread it exactly that way while the
+        # CLI was healthy (docs/INDEPENDENT_TEST_HAIKU_MCP_20260822.md). Every
+        # code emitted here must have a positive AND negative witness in
+        # tests/test_search_review_check_witness.py -- the completeness
+        # meta-guard there parses these literals out of this file.
+        failures = artifact.get("graph_probe_failures", [])
+        checks: list[dict[str, Any]] = []
+        by_code: dict[str, list[str]] = {}
+        for item in failures:
+            by_code.setdefault(item["code"], []).append(item["path"])
+        if "NOT_INDEXED" in by_code:
+            paths = by_code["NOT_INDEXED"]
+            checks.append({
+                "code": "PATHS_NOT_INDEXED",
+                "count": len(paths),
+                "paths_sample": paths[:3],
+                "required_action": (
+                    "These probed paths are outside Obsidian's index (dot-"
+                    "directories are never indexed); their graph edges came "
+                    "from the filesystem scan instead. The CLI itself answered "
+                    "-- do NOT read this as a CLI outage. Treat the filesystem "
+                    "edges for these paths as slightly noisier than indexed "
+                    "ones."
+                ),
+            })
+        if "CLI_UNAVAILABLE" in by_code:
+            paths = by_code["CLI_UNAVAILABLE"]
+            checks.append({
+                "code": "CLI_UNAVAILABLE",
+                "count": len(paths),
+                "paths_sample": paths[:3],
+                "required_action": (
+                    "The Obsidian CLI process did not answer these probes at "
+                    "all, so every graph edge in this result came from the "
+                    "filesystem scan. If live-index evidence matters for this "
+                    "question, start Obsidian and re-run before relying on "
+                    "graph-derived rankings."
+                ),
+            })
+        if "CLI_ERROR" in by_code:
+            paths = by_code["CLI_ERROR"]
+            checks.append({
+                "code": "CLI_ERROR",
+                "count": len(paths),
+                "paths_sample": paths[:3],
+                "required_action": (
+                    "The Obsidian CLI answered these probes with an error that "
+                    "is neither 'path not indexed' nor a dead process. Read the "
+                    "matching warning strings for the raw error text before "
+                    "trusting graph evidence involving these paths."
+                ),
+            })
+        result["review_checks"] = checks
         # v0.1 contract field, derived here rather than inside the retriever:
         # the public API is what stabilises, the algorithm stays replaceable.
         # `None` means "no fallback was needed" -- so it must not be None when
-        # one WAS used, or the field cannot distinguish the two cases.
-        result["fallback_used"] = _fallback_from_warnings(result.get("warnings"))
-        if result["fallback_used"]:
+        # one WAS used, or the field cannot distinguish the two cases. Typed
+        # failures are the primary source; the legacy string derivation stays
+        # as a floor so behaviour never regresses on artifacts that predate
+        # the typed field.
+        result["fallback_used"] = (
+            "filesystem" if failures
+            else _fallback_from_warnings(result.get("warnings"))
+        )
+        if result["fallback_used"] or checks:
             result["review_required"] = True
+            result["status"] = "review_required"
         result["artifact_digest"] = _digest(result)
         return result
 
@@ -257,21 +322,58 @@ def compact_search_result(result: dict[str, Any]) -> dict[str, Any]:
     ]
     warnings = [str(item) for item in result.get("warnings", [])]
     compact["warning_count"] = len(warnings)
-    compact["warnings"] = _compact_warnings(warnings)
+    compact["warnings"] = _compact_warnings(warnings, result.get("review_checks"))
     compact["projection"] = "compact-v1"
     compact["diagnostics_omitted"] = ["candidate_pool", "turns"]
     return compact
 
 
-def _compact_warnings(warnings: list[str]) -> list[str]:
+_COMPACT_CODE_LINES = {
+    # One line per review code. Derived from the TYPED codes, not re-guessed
+    # from warning text: the old single aggregate ("Obsidian CLI graph probes
+    # unavailable or failed: N; filesystem fallback used.") collapsed "these
+    # paths are not indexed" and "the CLI is down" into one sentence, and an
+    # independent zero-context reader took it for a CLI outage while the CLI
+    # was healthy (docs/INDEPENDENT_TEST_HAIKU_MCP_20260822.md).
+    "PATHS_NOT_INDEXED": (
+        "Obsidian's index does not cover {n} probed path(s) (dot-directories "
+        "are never indexed); the filesystem graph answered for those. The CLI "
+        "itself is answering."
+    ),
+    "CLI_UNAVAILABLE": (
+        "Obsidian CLI did not answer {n} probe(s); the filesystem graph "
+        "answered for those."
+    ),
+    "CLI_ERROR": (
+        "Obsidian CLI errored on {n} probe(s); see review_checks for the "
+        "required action."
+    ),
+}
+
+
+def _compact_warnings(
+    warnings: list[str],
+    review_checks: list[dict[str, Any]] | None = None,
+) -> list[str]:
     obsidian = [item for item in warnings if "obsidian" in item.casefold()]
     other = list(dict.fromkeys(item for item in warnings if item not in obsidian))
     compact = [item[:300] for item in other[:5]]
     if obsidian:
-        compact.append(
-            f"Obsidian CLI graph probes unavailable or failed: {len(obsidian)}; "
-            "filesystem fallback used."
-        )
+        coded = [c for c in (review_checks or [])
+                 if c.get("code") in _COMPACT_CODE_LINES]
+        if coded:
+            compact.extend(
+                _COMPACT_CODE_LINES[c["code"]].format(n=c.get("count", "?"))
+                for c in coded
+            )
+        else:
+            # Legacy artifacts predate the typed codes; for them the reason is
+            # genuinely unknown here, so the old (admittedly ambiguous) line is
+            # the honest one.
+            compact.append(
+                f"Obsidian CLI graph probes unavailable or failed: {len(obsidian)}; "
+                "filesystem fallback used."
+            )
     if len(other) > 5:
         compact.append(f"Additional non-Obsidian warnings omitted: {len(other) - 5}.")
     return compact

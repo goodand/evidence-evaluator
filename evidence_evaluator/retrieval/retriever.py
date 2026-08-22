@@ -165,6 +165,7 @@ class RecallFirstRetriever:
         for index, path in enumerate(bm25, start=1):
             lexical_rank[path] = min(lexical_rank.get(path, index), index)
         warnings = list(self.corpus.warnings)
+        graph_probe_failures: list[tuple[str, str]] = []
         turns = [
             {
                 "turn": 1,
@@ -212,6 +213,7 @@ class RecallFirstRetriever:
                 if self.obsidian is not None:
                     live = self.obsidian.neighbors(seed)
                     warnings.extend(live.warnings)
+                    graph_probe_failures.extend(live.failures)
                     live_outgoing = self._canonicalize_live(live.outgoing, seed)
                     live_backlinks = self._canonicalize_live(live.backlinks, seed)
                     edge_sets.extend(
@@ -302,6 +304,16 @@ class RecallFirstRetriever:
             "candidates": candidates,
             "turns": turns,
             "warnings": list(dict.fromkeys(warnings)),
+            # Typed (code, path) per failed CLI probe, from the obsidian
+            # layer's classification. Carried as data so the service can emit
+            # coded review_checks instead of re-deriving the reason from the
+            # warning text -- which is how "these paths are not indexed" got
+            # aggregated into a message reading "the CLI is down"
+            # (docs/INDEPENDENT_TEST_HAIKU_MCP_20260822.md).
+            "graph_probe_failures": [
+                {"code": code, "path": path}
+                for code, path in dict.fromkeys(graph_probe_failures)
+            ],
             "terminal_reason": terminal_reason,
             # Exhaustive means the search ran out of graph to explore, not
             # merely out of turns. A budget cutoff or an empty lexical seed is

@@ -93,6 +93,44 @@ def test_vault_harness_dir_env_var_overrides_the_hardcoded_default(tmp_path):
 # disagreement-detector). Its own explicit guidance: never guess "confirmed"
 # on CLI failure.
 
+def test_confirm_active_vault_reports_unknown_when_its_own_resolve_fails(
+    tmp_path, monkeypatch
+):
+    """The witness for the `except OSError:` around `vault_root.resolve()` --
+    F8 (adversarial review 2026-08-17). Every test that reached this code
+    mocked `confirm_active_vault` wholesale, so mutating the except clause to
+    `except ValueError` survived the entire suite: the branch was real but
+    nobody had ever seen it fire.
+
+    The world is genuine, not mocked (do NOT replace it with a monkeypatched
+    resolve -- a mock-built negative test turns the gate green while proving
+    nothing, per HARNESS_KNOWHOW §B4a): a RELATIVE vault root while the
+    process's cwd has been deleted. Measured on this interpreter
+    (Python 3.13.13/macOS, 2026-08-22): `Path("relative").resolve()` with a
+    deleted cwd raises FileNotFoundError (an OSError); an ABSOLUTE path still
+    resolves fine, which is why the runner's reported path passes the first
+    try-block and the failure lands exactly on the guarded second resolve.
+
+    Also measured, refuting the review's proposed trigger: a symlink LOOP
+    does not raise at all here (resolve() is non-strict), so widening the
+    clause to catch RuntimeError would be robustness theatre with no
+    constructible witness -- the clause stays `except OSError`.
+    """
+    def fake_run(command, cwd, timeout=15):
+        return subprocess.CompletedProcess(command, 0, str(tmp_path), "")
+
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    monkeypatch.chdir(doomed)   # teardown restores the original cwd
+    doomed.rmdir()              # cwd is now gone
+
+    verdict = confirm_active_vault(Path("relative-vault"), run_fn=fake_run)
+    assert verdict == "unknown", (
+        f"resolve() failing inside confirm_active_vault must degrade to "
+        f"'unknown', never escape to the MCP boundary; got {verdict!r}"
+    )
+
+
 def test_confirm_active_vault_matches_reports_confirmed(tmp_path):
     def fake_run(command, cwd, timeout=15):
         return subprocess.CompletedProcess(command, 0, str(tmp_path), "")

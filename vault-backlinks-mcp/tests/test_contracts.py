@@ -143,11 +143,20 @@ def test_obsidian_unavailable_falls_back_but_is_clearly_labeled(vault, monkeypat
     # asserted only on the shape of the result, so "the fallback ran" and
     # "something produced a fallback-shaped result" were indistinguishable.
     calls = []
-    real_fallback = contracts.filesystem_fallback_backlinks
+    # The real fallback comes from its home module, NOT off `contracts`, and
+    # the switch is pinned on. `contracts` reads the environment at IMPORT
+    # time and binds `filesystem_fallback_backlinks` to None when the fallback
+    # is off, so reading it from there made this test inherit whatever state
+    # the ambient environment -- or a previously-run test's reload -- left
+    # behind. Found by the harness's within-file shuffle: this test PASSED in
+    # definition order and FAILED under pinned seeds 2-4, where the
+    # env-parsing test's reload ran first. Same fix as the F2 witness.
+    from obsidian_backend_evidence import filesystem_fallback_backlinks as real_fallback
 
     def spy(vault_root, path):
         calls.append((vault_root, path))
         return real_fallback(vault_root, path)
+    monkeypatch.setattr(contracts, "FILESYSTEM_FALLBACK_ENABLED", True)
     monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", spy)
 
     # Give the fixture a REAL incoming link. A second adversarial review
@@ -191,6 +200,10 @@ def test_a_crashing_filesystem_fallback_still_returns_a_structured_error(
         raise OSError("vault root vanished")
 
     monkeypatch.setattr(contracts, "fetch_backlinks", raise_unavailable)
+    # Pinned on for the same reason as the spy test above: the world this test
+    # describes requires the fallback path to be taken, so the test builds
+    # that world instead of inheriting it from import-time configuration.
+    monkeypatch.setattr(contracts, "FILESYSTEM_FALLBACK_ENABLED", True)
     monkeypatch.setattr(contracts, "filesystem_fallback_backlinks", exploding_fallback)
 
     result = contracts.query_backlinks("t1", "target.md", registry=vault)
@@ -206,22 +219,38 @@ def test_unrecognized_fallback_env_values_do_not_silently_disable_it(monkeypatch
     of what someone typing them intends. Recognized off-spellings must turn
     it off; anything unrecognized still defaults to on."""
     import importlib
+    import os
+    # This test reloads `contracts`, and monkeypatch cannot undo a reload --
+    # the teardown restores os.environ but the MODULE stays configured by
+    # whatever the last reload saw. The original cleanup did
+    # `delenv` + reload, which reconfigured the module to "fallback on"
+    # regardless of the ambient environment, and that leak masked the F2
+    # witness's own environment dependence for the rest of the session
+    # (docs/PRIOR_ART_ORDER_DEPENDENCE_20260818.md). The finally below
+    # restores the ORIGINAL value -- present or absent -- and reloads once
+    # more, so the module leaves this test in the state it entered it.
+    original = os.environ.get("VAULT_BACKLINKS_FILESYSTEM_FALLBACK")
     # Uppercase spellings included deliberately: a follow-up review
     # (2026-08-16) found the comparison was case-sensitive, so "FALSE"/"OFF"/
     # "NO" fell through and ENABLED the fallback an operator was disabling.
-    for value, expected in (("0", False), ("false", False), ("False", False),
-                            ("FALSE", False), ("no", False), ("NO", False),
-                            ("off", False), ("OFF", False),
-                            ("disabled", False), ("DISABLED", False),
-                            (" 0 ", False), ("1", True), ("true", True),
-                            ("", True)):
-        monkeypatch.setenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", value)
-        reloaded = importlib.reload(contracts)
-        assert reloaded.FILESYSTEM_FALLBACK_ENABLED is expected, (
-            f"{value!r} should map to enabled={expected}"
-        )
-    monkeypatch.delenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", raising=False)
-    importlib.reload(contracts)
+    try:
+        for value, expected in (("0", False), ("false", False), ("False", False),
+                                ("FALSE", False), ("no", False), ("NO", False),
+                                ("off", False), ("OFF", False),
+                                ("disabled", False), ("DISABLED", False),
+                                (" 0 ", False), ("1", True), ("true", True),
+                                ("", True)):
+            monkeypatch.setenv("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", value)
+            reloaded = importlib.reload(contracts)
+            assert reloaded.FILESYSTEM_FALLBACK_ENABLED is expected, (
+                f"{value!r} should map to enabled={expected}"
+            )
+    finally:
+        if original is None:
+            os.environ.pop("VAULT_BACKLINKS_FILESYSTEM_FALLBACK", None)
+        else:
+            os.environ["VAULT_BACKLINKS_FILESYSTEM_FALLBACK"] = original
+        importlib.reload(contracts)
 
 
 def test_obsidian_unavailable_is_an_honest_failure_when_fallback_is_off(
@@ -275,6 +304,52 @@ def test_max_results_truncation_is_flagged(vault, monkeypatch):
     assert len(result["backlinks"]) == 2
     codes = [c["code"] for c in result["review_checks"]]
     assert "TRUNCATED" in codes
+
+
+def test_truncation_alone_sets_review_required(vault, monkeypatch):
+    """F4 (adversarial review 2026-08-17, re-confirmed on this tree
+    2026-08-22): `review_required = bool(review_checks) or truncated` -- and
+    nothing anywhere in the suite pinned the `or truncated` term. Removing it
+    left the whole suite green, because `review_checks` in that expression is
+    evaluated BEFORE the TRUNCATED entry is appended to the result. This is
+    the one field the calling agent actually branches on: a truncated result
+    with review_required=false means the caller answers from a silently
+    partial pool and skips the required action. That state existed for real --
+    a dead verification agent left `review_required: False` hardcoded in this
+    module and 88 tests passed.
+
+    The world here is truncation and NOTHING else: every result in scope,
+    valid, unfiltered, active vault confirmed (conftest), so no other check
+    can carry the flag for the mutation to hide behind."""
+    many = [{"file": "docs/source.md", "count": "1"}] * 3
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
+    result = contracts.query_backlinks("t1", "target.md", max_results=1,
+                                       registry=vault)
+    codes = [c["code"] for c in result["review_checks"]]
+    assert codes == ["TRUNCATED"], (
+        f"this world must produce ONLY the truncation check, or the assertion "
+        f"below proves nothing about the `or truncated` term: {codes}"
+    )
+    assert result["review_required"] is True, (
+        "a truncated result went out with review_required=false -- the caller "
+        "would treat a partial answer as complete"
+    )
+
+
+def test_review_required_agrees_with_the_emitted_checks(vault, monkeypatch):
+    """The general invariant behind F4: the flag must be computed from (or at
+    least consistent with) the checks the RESULT actually carries, not from an
+    intermediate list captured before appends. If someone adds another
+    post-flag append, this catches it without knowing its name."""
+    many = [{"file": "docs/source.md", "count": "1"}] * 3
+    monkeypatch.setattr(contracts, "fetch_backlinks", lambda root, name, path: many)
+    result = contracts.query_backlinks("t1", "target.md", max_results=1,
+                                       registry=vault)
+    assert result["review_checks"], "world broken: expected at least TRUNCATED"
+    assert result["review_required"] is True, (
+        "result carries review_checks but review_required is false -- the two "
+        "fields disagree, so one of them is lying to the caller"
+    )
 
 
 def test_max_results_zero_is_rejected(vault):
